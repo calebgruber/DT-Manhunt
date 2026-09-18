@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS messages (
   sender_admin_user_id BIGINT UNSIGNED NULL,
   recipient_scope VARCHAR(60) NOT NULL,
   body TEXT NOT NULL,
+  priority VARCHAR(20) NOT NULL DEFAULT 'info',
   metadata JSON NULL,
   created_at DATETIME NOT NULL,
   PRIMARY KEY (id),
@@ -87,4 +88,16 @@ CREATE TABLE IF NOT EXISTS incidents (
   PRIMARY KEY (id),
   KEY idx_incidents_status_created (status, created_at),
   CONSTRAINT fk_incidents_reporter FOREIGN KEY (reporter_user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS group_chat_messages (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  full_name VARCHAR(220) NOT NULL,
+  group_name VARCHAR(32) NOT NULL,
+  body TEXT NOT NULL,
+  created_at DATETIME NOT NULL,
+  PRIMARY KEY (id),
+  KEY idx_group_chat_group_created (group_name, created_at),
+  CONSTRAINT fk_group_chat_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -82,10 +82,55 @@ function db(): PDO
     if (str_starts_with($dsn, 'sqlite:')) {
         $pdo->exec('PRAGMA foreign_keys = ON');
         bootstrapSqlite($pdo);
+    } elseif ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql') {
+        bootstrapMySql($pdo);
     }
     ensureConfiguredTestAdmin($pdo);
 
     return $pdo;
+}
+
+function mysqlTableExists(PDO $pdo, string $table): bool
+{
+    $stmt = $pdo->prepare(
+        'SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = :table_name'
+    );
+    $stmt->execute(['table_name' => $table]);
+    return (int) $stmt->fetchColumn() > 0;
+}
+
+function mysqlColumnExists(PDO $pdo, string $table, string $column): bool
+{
+    $stmt = $pdo->prepare(
+        'SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = :table_name AND column_name = :column_name'
+    );
+    $stmt->execute([
+        'table_name' => $table,
+        'column_name' => $column,
+    ]);
+    return (int) $stmt->fetchColumn() > 0;
+}
+
+function bootstrapMySql(PDO $pdo): void
+{
+    if (!mysqlTableExists($pdo, 'group_chat_messages')) {
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS group_chat_messages (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                user_id BIGINT UNSIGNED NOT NULL,
+                full_name VARCHAR(220) NOT NULL,
+                group_name VARCHAR(32) NOT NULL,
+                body TEXT NOT NULL,
+                created_at DATETIME NOT NULL,
+                PRIMARY KEY (id),
+                KEY idx_group_chat_group_created (group_name, created_at),
+                CONSTRAINT fk_group_chat_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+    }
+    if (!mysqlColumnExists($pdo, 'messages', 'priority')) {
+        $pdo->exec("ALTER TABLE messages ADD COLUMN priority VARCHAR(20) NOT NULL DEFAULT 'info' AFTER body");
+    }
 }
 
 function sqliteHasColumn(PDO $pdo, string $table, string $column): bool
