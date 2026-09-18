@@ -1,27 +1,46 @@
 body {
   min-height: 100vh;
+  background: linear-gradient(180deg, #f8f9fb 0%, #eef3f8 100%);
 }
 
 .app-shell {
-  max-width: 720px;
+  max-width: 760px;
+}
+
+.auth-card,
+.step-card,
+#stepperCard {
+  border-radius: 1rem;
+}
+
+.auth-layout {
+  display: block;
+}
+
+.auth-brand {
+  align-items: center;
+  background: linear-gradient(135deg, #f2f7ff 0%, #eef6ff 100%);
+  border: 1px solid #dce8fb;
+  border-radius: 0.9rem;
+  padding: 1.25rem;
 }
 
 .stepper {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0.5rem;
 }
 
 .step {
-  background: #1d1f23;
-  border: 1px solid #3a3f46;
+  background: #f8f9fa;
+  border: 1px solid #e1e5ea;
   border-radius: 0.75rem;
   padding: 0.5rem;
   text-align: center;
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
 }
 
 .step span {
@@ -29,7 +48,7 @@ body {
   height: 1.5rem;
   margin: 0 auto;
   border-radius: 999px;
-  border: 1px solid #6c757d;
+  border: 1px solid #adb5bd;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -37,13 +56,13 @@ body {
 }
 
 .step.active {
-  border-color: #0d6efd;
-  background: #0b264f;
+  border-color: #1f5fff;
+  background: #e9f0ff;
 }
 
 .step.active span {
-  border-color: #0d6efd;
-  background: #0d6efd;
+  border-color: #1f5fff;
+  background: #1f5fff;
   color: #fff;
 }
 
@@ -56,16 +75,58 @@ body {
   border-width: 2px;
 }
 
-@media (max-width: 576px) {
+.matchmaking-layout {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr;
+}
+
+.complete-card {
+  border: 1px solid #c7f0dc;
+}
+
+@media (max-width: 767.98px) {
   #stepperCard {
     position: sticky;
-    top: 0;
+    top: 0.5rem;
     z-index: 10;
-    background: #000;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(6px);
   }
 
   .mode-btn {
     min-height: 120px;
+  }
+}
+
+@media (min-width: 992px) {
+  .app-shell {
+    max-width: 1120px;
+  }
+
+  .auth-layout {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: 0.9fr 1.1fr;
+    align-items: stretch;
+  }
+
+  .app-layout {
+    display: grid;
+    grid-template-columns: 300px minmax(0, 1fr);
+    gap: 1rem;
+    align-items: start;
+  }
+
+  .app-sidebar {
+    position: sticky;
+    top: 1rem;
+  }
+
+  .matchmaking-layout {
+    grid-template-columns: 1.15fr 0.85fr;
+  }
+
+  .mode-btn {
+    min-height: 160px;
   }
 }

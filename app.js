@@ -136,10 +136,10 @@ function renderUser() {
   el.resumeCard.classList.remove('d-none');
   el.resumeCard.textContent = `Resumed at step: ${step.charAt(0).toUpperCase() + step.slice(1)}`;
 
-  el.profileSummary.textContent = `${state.user.full_name} (@${state.user.display_name}) • ${state.user.graduation_year} • ${state.user.concentration}`;
+  el.profileSummary.textContent = `${state.user.full_name} • ${state.user.graduation_year} • ${state.user.concentration}`;
 
   const teammateText = state.matchmaking?.teammate
-    ? `Teammate matched: ${state.matchmaking.teammate.display_name}`
+    ? `Teammate matched: ${state.matchmaking.teammate.full_name}`
     : 'No teammate matched yet';
 
   el.paymentInfo.textContent = '';
@@ -153,7 +153,7 @@ function renderUser() {
 
   if (state.user.teammate_user_id && state.matchmaking?.teammate) {
     el.teammateCard.classList.remove('d-none');
-    el.teammateCard.textContent = `Matched with ${state.matchmaking.teammate.display_name}. Both users move to payment.`;
+    el.teammateCard.textContent = `Matched with ${state.matchmaking.teammate.full_name}. Both users move to payment.`;
   } else {
     el.teammateCard.classList.add('d-none');
   }
@@ -228,7 +228,7 @@ function renderSearchResults(results) {
     const info = document.createElement('div');
     const name = document.createElement('div');
     name.className = 'fw-semibold';
-    name.textContent = user.display_name;
+    name.textContent = user.full_name;
     const meta = document.createElement('small');
     meta.className = 'text-secondary';
     meta.textContent = `${user.graduation_year} • ${user.concentration}`;
@@ -245,7 +245,7 @@ function renderSearchResults(results) {
     button.addEventListener('click', async () => {
       try {
         await api('send_invite', { invitee_user_id: user.id });
-        showToast(`Invite sent to ${user.display_name}`, 'success');
+        showToast(`Invite sent to ${user.full_name}`, 'success');
         await fetchMatchmakingState();
       } catch (error) {
         showToast(error.message, 'danger');
@@ -276,7 +276,7 @@ function renderIncomingInvites(incoming = []) {
     card.className = 'p-2 border border-secondary rounded';
     const title = document.createElement('div');
     title.className = 'fw-semibold mb-2';
-    title.textContent = `${invite.inviter_display_name} invited you`;
+    title.textContent = `${invite.inviter_full_name} invited you`;
 
     const buttonRow = document.createElement('div');
     buttonRow.className = 'd-flex gap-2';
@@ -318,7 +318,7 @@ function renderOutgoingInvite(outgoing) {
     return;
   }
 
-  let text = `Invite to ${outgoing.invitee_display_name}: ${outgoing.status}`;
+  let text = `Invite to ${outgoing.invitee_full_name}: ${outgoing.status}`;
   if (outgoing.status === 'declined') {
     text += ' — select a new teammate.';
   }

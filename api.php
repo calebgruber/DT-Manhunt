@@ -31,14 +31,15 @@ try {
     $pdo = db();
 
     if ($action === 'register') {
-        $fullName = trim((string) ($input['full_name'] ?? ''));
-        $displayName = trim((string) ($input['display_name'] ?? ''));
+        $firstName = trim((string) ($input['first_name'] ?? ''));
+        $lastName = trim((string) ($input['last_name'] ?? ''));
+        $fullName = trim($firstName . ' ' . $lastName);
         $phone = preg_replace('/\D+/', '', (string) ($input['phone'] ?? ''));
         $pin = trim((string) ($input['pin'] ?? ''));
         $graduationYear = trim((string) ($input['graduation_year'] ?? ''));
         $concentration = trim((string) ($input['concentration'] ?? ''));
 
-        if ($fullName === '' || $displayName === '' || $phone === '' || $pin === '' || $graduationYear === '' || $concentration === '') {
+        if ($firstName === '' || $lastName === '' || $phone === '' || $pin === '' || $graduationYear === '' || $concentration === '') {
             reply(false, ['message' => 'All registration fields are required.'], 422);
         }
 
@@ -50,23 +51,24 @@ try {
             reply(false, ['message' => 'PIN must be 4-8 digits.'], 422);
         }
 
-        $existingStmt = $pdo->prepare('SELECT id FROM users WHERE phone = :phone OR lower(display_name) = lower(:display_name) LIMIT 1');
-        $existingStmt->execute(['phone' => $phone, 'display_name' => $displayName]);
+        $existingStmt = $pdo->prepare('SELECT id FROM users WHERE phone = :phone LIMIT 1');
+        $existingStmt->execute(['phone' => $phone]);
         if ($existingStmt->fetch()) {
-            reply(false, ['message' => 'Phone number or display name already in use.'], 409);
+            reply(false, ['message' => 'Phone number already in use.'], 409);
         }
 
         $now = nowIso();
         $stmt = $pdo->prepare(
-            'INSERT INTO users (phone, pin_hash, full_name, display_name, graduation_year, concentration, registration_step, created_at, updated_at)
-             VALUES (:phone, :pin_hash, :full_name, :display_name, :graduation_year, :concentration, :registration_step, :created_at, :updated_at)'
+            'INSERT INTO users (phone, pin_hash, first_name, last_name, full_name, graduation_year, concentration, registration_step, created_at, updated_at)
+             VALUES (:phone, :pin_hash, :first_name, :last_name, :full_name, :graduation_year, :concentration, :registration_step, :created_at, :updated_at)'
         );
 
         $stmt->execute([
             'phone' => $phone,
             'pin_hash' => password_hash($pin, PASSWORD_DEFAULT),
+            'first_name' => $firstName,
+            'last_name' => $lastName,
             'full_name' => $fullName,
-            'display_name' => $displayName,
             'graduation_year' => $graduationYear,
             'concentration' => $concentration,
             'registration_step' => 'profile',
@@ -171,14 +173,14 @@ try {
         }
 
         $stmt = $pdo->prepare(
-            'SELECT id, display_name, full_name, graduation_year, concentration
+            'SELECT id, first_name, last_name, full_name, graduation_year, concentration
              FROM users
              WHERE id <> :self
-               AND lower(display_name) LIKE lower(:q)
+               AND lower(full_name) LIKE lower(:q)
                AND (mode IS NULL OR mode = "duo")
                AND (teammate_user_id IS NULL)
                AND registration_step IN ("profile", "mode", "matchmaking")
-             ORDER BY display_name ASC
+             ORDER BY last_name ASC, first_name ASC
              LIMIT 20'
         );
         $stmt->execute(['self' => (int) $user['id'], 'q' => '%' . $query . '%']);
@@ -241,7 +243,7 @@ try {
         $user = requireUser();
 
         $incomingStmt = $pdo->prepare(
-            'SELECT i.id, i.created_at, i.inviter_user_id, u.display_name AS inviter_display_name
+            'SELECT i.id, i.created_at, i.inviter_user_id, u.full_name AS inviter_full_name
              FROM invites i
              JOIN users u ON u.id = i.inviter_user_id
              WHERE i.invitee_user_id = :uid AND i.status = "pending"
@@ -253,12 +255,12 @@ try {
                 'id' => (int) $row['id'],
                 'created_at' => $row['created_at'],
                 'inviter_user_id' => (int) $row['inviter_user_id'],
-                'inviter_display_name' => $row['inviter_display_name'],
+                'inviter_full_name' => $row['inviter_full_name'],
             ];
         }, $incomingStmt->fetchAll());
 
         $outgoingStmt = $pdo->prepare(
-            'SELECT i.id, i.status, i.updated_at, i.invitee_user_id, u.display_name AS invitee_display_name
+            'SELECT i.id, i.status, i.updated_at, i.invitee_user_id, u.full_name AS invitee_full_name
              FROM invites i
              JOIN users u ON u.id = i.invitee_user_id
              WHERE i.inviter_user_id = :uid
