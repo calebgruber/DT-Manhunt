@@ -65,6 +65,7 @@ Registration state is stored by step (`profile`, `mode`, `matchmaking`, `payment
 ## 5) Session + Progress Persistence
 
 - login uses phone + PIN and returns authenticated app session + websocket token
+- both players and admins receive websocket tokens with role-aware claims (`role=player|admin`, plus identity/team linkage as applicable)
 - logout clears active browser session but does not clear registration/game progress
 - on next login, PHP loads saved progress and routes user to the correct step/page
 

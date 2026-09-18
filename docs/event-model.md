@@ -140,7 +140,22 @@ Validation rules:
 }
 ```
 
-`duo_invite_accepted` / `duo_match_confirmed`
+`duo_invite_accepted`
+
+```json
+{
+  "type": "duo_invite_accepted",
+  "scope": "users",
+  "user_ids": [101, 202],
+  "data": {
+    "invite_id": "inv_123",
+    "accepted_by_user_id": 202,
+    "status": "accepted"
+  }
+}
+```
+
+`duo_match_confirmed`
 
 ```json
 {
@@ -168,6 +183,13 @@ Validation rules:
 ```
 
 Client navigation should be derived from `step` using the app's step-to-route map.
+
+Canonical step-to-route map:
+- `profile` → `/game/register/profile`
+- `mode` → `/game/register/mode`
+- `matchmaking` → `/game/register/matchmaking`
+- `payment` → `/game/register/payment`
+- `complete` → `/game/register/complete`
 
 ## 6) Client Handlers
 
