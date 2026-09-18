@@ -681,7 +681,14 @@ function wireEvents() {
     }
   });
 
-  ui.openIncidentModalBtn?.addEventListener('click', () => {
+  ui.openIncidentModalBtn?.addEventListener('click', async () => {
+    if (document.fullscreenElement && document.fullscreenElement !== document.documentElement) {
+      try {
+        await document.exitFullscreen();
+      } catch (_) {
+        // ignore
+      }
+    }
     if (window.bootstrap?.Modal) {
       const modal = bootstrap.Modal.getOrCreateInstance(ui.incidentModal);
       modal.show();

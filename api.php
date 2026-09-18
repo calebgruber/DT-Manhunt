@@ -606,31 +606,6 @@ try {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
-
-            if ($action === 'send_group_chat') {
-                $user = requireUser();
-                $body = trim((string) ($input['body'] ?? ''));
-                if ($body === '') {
-                    respond(false, ['message' => 'Message is required.'], 422);
-                }
-                if (mb_strlen($body) > 1000) {
-                    respond(false, ['message' => 'Message is too long.'], 422);
-                }
-
-                $group = userChatGroup($user);
-                $stmt = $pdo->prepare(
-                    'INSERT INTO group_chat_messages (user_id, full_name, group_name, body, created_at) VALUES (:user_id, :full_name, :group_name, :body, :created_at)'
-                );
-                $stmt->execute([
-                    'user_id' => (int) $user['id'],
-                    'full_name' => (string) $user['full_name'],
-                    'group_name' => $group,
-                    'body' => $body,
-                    'created_at' => nowUtc(),
-                ]);
-                respond(true);
-            }
-
             respond(false, ['message' => $e->getMessage()], 409);
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) {
@@ -638,6 +613,30 @@ try {
             }
             throw $e;
         }
+    }
+
+    if ($action === 'send_group_chat') {
+        $user = requireUser();
+        $body = trim((string) ($input['body'] ?? ''));
+        if ($body === '') {
+            respond(false, ['message' => 'Message is required.'], 422);
+        }
+        if (mb_strlen($body) > 1000) {
+            respond(false, ['message' => 'Message is too long.'], 422);
+        }
+
+        $group = userChatGroup($user);
+        $stmt = $pdo->prepare(
+            'INSERT INTO group_chat_messages (user_id, full_name, group_name, body, created_at) VALUES (:user_id, :full_name, :group_name, :body, :created_at)'
+        );
+        $stmt->execute([
+            'user_id' => (int) $user['id'],
+            'full_name' => (string) $user['full_name'],
+            'group_name' => $group,
+            'body' => $body,
+            'created_at' => nowUtc(),
+        ]);
+        respond(true);
     }
 
     if ($action === 'report_incident') {
