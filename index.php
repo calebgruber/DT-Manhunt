@@ -12,10 +12,9 @@ $user = currentUser();
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>DT Manhunt</title>
-  <!-- Ayro UI CDN -->
-  <link rel="stylesheet" href="https://cdn.ayroui.com/1.0/css/bootstrap.min.css" />
-  <link rel="stylesheet" href="https://cdn.lineicons.com/3.0/lineicons.css" />
-  <link rel="stylesheet" href="https://cdn.ayroui.com/1.0/css/starter.css" />
+  <!-- Tabler UI CDN -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/css/tabler.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.38.0/dist/tabler-icons.min.css" />
   <link href="/style.css" rel="stylesheet">
 </head>
 <body class="dark-ui">
@@ -35,7 +34,7 @@ $user = currentUser();
         <div class="auth-grid">
           <aside class="brand-panel d-none d-lg-flex">
             <div>
-              <span class="badge text-bg-primary mb-3">Ayro UI + Dark Mode</span>
+              <span class="badge text-bg-primary mb-3">Tabler UI + Dark Mode</span>
               <h2 class="h4">Join the campus game</h2>
               <p class="text-muted mb-0">Desktop shows side-by-side panels. Mobile keeps a stacked, touch-first flow.</p>
             </div>
@@ -122,13 +121,13 @@ $user = currentUser();
               <div class="row g-2">
                 <div class="col-12 col-md-6">
                   <button class="btn btn-outline-light mode-btn w-100" data-mode="solo" type="button">
-                    <i class="lni lni-user d-block fs-2"></i>
+                    <i class="ti ti-user d-block fs-2"></i>
                     <span>Solo</span>
                   </button>
                 </div>
                 <div class="col-12 col-md-6">
                   <button class="btn btn-outline-info mode-btn w-100" data-mode="duo" type="button">
-                    <i class="lni lni-users d-block fs-2"></i>
+                    <i class="ti ti-users d-block fs-2"></i>
                     <span>Duo</span>
                   </button>
                 </div>
@@ -186,7 +185,7 @@ $user = currentUser();
       JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
     ); ?>;
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/js/tabler.min.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

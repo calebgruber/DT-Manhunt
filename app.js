@@ -37,6 +37,9 @@ const ui = {
 function toast(message, type = 'primary') {
   const wrapper = document.createElement('div');
   wrapper.className = `toast align-items-center text-bg-${type} border-0`;
+  wrapper.setAttribute('role', 'status');
+  wrapper.setAttribute('aria-live', 'polite');
+  wrapper.setAttribute('aria-atomic', 'true');
   const row = document.createElement('div');
   row.className = 'd-flex';
   const body = document.createElement('div');
@@ -49,9 +52,14 @@ function toast(message, type = 'primary') {
   row.append(body, close);
   wrapper.appendChild(row);
   ui.toastContainer.appendChild(wrapper);
-  const t = new bootstrap.Toast(wrapper, { delay: 3000 });
-  t.show();
-  wrapper.addEventListener('hidden.bs.toast', () => wrapper.remove());
+  if (window.bootstrap?.Toast) {
+    const t = new bootstrap.Toast(wrapper, { delay: 3000 });
+    t.show();
+    wrapper.addEventListener('hidden.bs.toast', () => wrapper.remove());
+    return;
+  }
+  wrapper.classList.add('show');
+  setTimeout(() => wrapper.remove(), 3000);
 }
 
 async function api(action, payload = {}) {

@@ -14,10 +14,16 @@ body.dark-ui {
   background: radial-gradient(circle at top, #1a253a 0%, var(--bg-1) 35%, var(--bg-0) 100%);
   color: var(--text);
   line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 .app-container {
   max-width: 860px;
+}
+
+.page-header h1 {
+  font-weight: 650;
 }
 
 .page-header .eyebrow {
@@ -125,6 +131,10 @@ body.dark-ui {
   margin-bottom: 1rem;
 }
 
+.step-pane .card-body {
+  padding: 1rem;
+}
+
 .mode-btn {
   min-height: 128px;
   border-width: 2px;
@@ -177,6 +187,10 @@ body.dark-ui {
     min-width: 84px;
   }
 
+  .step-pane .card-body {
+    padding: 0.9rem;
+  }
+
   #stepperCard {
     position: sticky;
     top: 0.5rem;
@@ -204,6 +218,10 @@ body.dark-ui {
     align-items: start;
   }
 
+  .flow-area {
+    min-height: 70vh;
+  }
+
   .left-rail {
     position: sticky;
     top: 1rem;
@@ -225,5 +243,6 @@ body.dark-ui {
 
   .mode-btn {
     min-height: 170px;
+    font-size: 1.05rem;
   }
 }
