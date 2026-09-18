@@ -12,9 +12,15 @@ $user = currentUser();
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>DT Manhunt</title>
-  <link href="https://cdn.jsdelivr.net/gh/ayroui/bootstrap-ui-components@96a9f7dc00bd6d2bcaedf11c163fec2ededfbb2c/assets/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/gh/ayroui/bootstrap-ui-components@96a9f7dc00bd6d2bcaedf11c163fec2ededfbb2c/assets/scss/starter.css" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <!--====== Bootstrap CSS ======-->
+<link
+  rel="stylesheet"
+  href="https://cdn.ayroui.com/1.0/css/bootstrap.min.css"
+/>
+<!--====== Lineicons CSS ======-->
+<link href="https://cdn.lineicons.com/3.0/lineicons.css" rel="stylesheet" />
+<!--====== Style css ======-->
+<link rel="stylesheet" href="https://cdn.ayroui.com/1.0/css/starter.css" />
   <link href="/style.css" rel="stylesheet">
 </head>
 <body class="dark-ui">
