@@ -1,0 +1,45 @@
+<?php
+
+declare(strict_types=1);
+
+return [
+    'database' => [
+        // Example MySQL DSN:
+        // mysql:host=localhost;port=3306;dbname=your_database;charset=utf8mb4
+        'dsn' => 'mysql:host=localhost;port=3306;dbname=your_database;charset=utf8mb4',
+        'user' => 'your_database_user',
+        'pass' => 'your_database_password',
+    ],
+    'realtime' => [
+        'ws_url' => 'wss://yourdomain.com/ws',
+        'bridge_url' => 'http://127.0.0.1:3000/event',
+        'bridge_secret' => 'set-a-long-random-secret',
+    ],
+    'security' => [
+        'session_name' => 'dt_manhunt_session',
+    ],
+    'registration' => [
+        // Update these in admin/local config as needed.
+        'graduation_year_options' => ['2026', '2027', '2028', '2029', '2030'],
+        'concentration_options' => [
+            'Stage Management',
+            'Lighting Design',
+            'Sound Design',
+            'Scenic',
+            'TD / PM',
+        ],
+    ],
+    'admin' => [
+        'allowed_phone_numbers' => ['9145551000'],
+        'venmo_link' => 'https://venmo.com/u/youraccount',
+    ],
+    'test_admin' => [
+        'enabled' => true,
+        'phone' => '0000000000',
+        'pin' => '0000',
+        'first_name' => 'Admin',
+        'last_name' => 'Test',
+        'graduation_year' => '2027',
+        'concentration' => 'Stage Management',
+    ],
+];
