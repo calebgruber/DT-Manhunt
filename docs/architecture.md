@@ -41,9 +41,9 @@ Node validates shared secret and broadcasts normalized events.
 
 Registration is a persisted multi-step flow so users can leave and return without losing progress.
 
-1. User starts registration and chooses `single` or `duo`.
+1. User starts registration and chooses `solo` or `duo`.
 2. User enters required profile fields (name, phone, PIN, graduation year, concentration, plus other configured profile fields).
-3. If `single`: user proceeds directly to payment.
+3. If `solo`: user proceeds directly to payment.
 4. If `duo`: user enters teammate matching step, searches users by name, and sends invite.
 5. Invite recipient receives a live prompt and can accept or decline.
 6. On decline:

@@ -52,6 +52,18 @@ Required additional field for team scope:
 { "scope": "team", "team_id": 42 }
 ```
 
+Required additional field for user scope:
+
+```json
+{ "scope": "user", "user_id": 202 }
+```
+
+Required additional field for users scope:
+
+```json
+{ "scope": "users", "user_ids": [101, 202] }
+```
+
 ### Admin-only
 - `location_update`
 - `team_status_update`
