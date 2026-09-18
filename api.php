@@ -80,7 +80,7 @@ function normalizeUserIds(mixed $rawIds): array
 function loadInbox(PDO $pdo, int $userId): array
 {
     $stmt = $pdo->prepare(
-        "SELECT mr.message_id, mr.is_read, m.body, m.recipient_scope, m.created_at
+        "SELECT mr.message_id, mr.is_read, m.body, m.priority, m.recipient_scope, m.created_at
          FROM message_recipients mr
          JOIN messages m ON m.id = mr.message_id
          WHERE mr.user_id = :user_id
@@ -93,9 +93,42 @@ function loadInbox(PDO $pdo, int $userId): array
         'message_id' => (int) $row['message_id'],
         'is_read' => (int) $row['is_read'] === 1,
         'body' => (string) $row['body'],
+        'priority' => (string) ($row['priority'] ?? 'info'),
         'recipient_scope' => (string) $row['recipient_scope'],
         'created_at' => (string) $row['created_at'],
     ], $stmt->fetchAll());
+}
+
+function userChatGroup(array $user): string
+{
+    $status = (string) ($user['game_status'] ?? 'in');
+    if ($status === 'seeker') {
+        return 'seekers';
+    }
+    if ($status === 'withdrawn' || $status === 'eliminated' || (int) ($user['is_enrolled'] ?? 1) === 0) {
+        return 'withdrawn';
+    }
+    return 'in';
+}
+
+function loadGroupChat(PDO $pdo, string $group): array
+{
+    $stmt = $pdo->prepare(
+        "SELECT id, user_id, full_name, body, created_at
+         FROM group_chat_messages
+         WHERE group_name = :group_name
+         ORDER BY id DESC
+         LIMIT 50"
+    );
+    $stmt->execute(['group_name' => $group]);
+    $rows = array_map(static fn (array $row): array => [
+        'id' => (int) $row['id'],
+        'user_id' => (int) $row['user_id'],
+        'full_name' => (string) $row['full_name'],
+        'body' => (string) $row['body'],
+        'created_at' => (string) $row['created_at'],
+    ], $stmt->fetchAll());
+    return array_reverse($rows);
 }
 
 function killboardData(PDO $pdo): array
@@ -300,6 +333,8 @@ function dashboardPayload(PDO $pdo, array $user): array
 
     $killboard = killboardData($pdo);
     $clock = gameClockData();
+    $chatGroup = userChatGroup($user);
+    $chatMessages = loadGroupChat($pdo, $chatGroup);
 
     return [
         'game_stage' => gameStage(),
@@ -312,6 +347,8 @@ function dashboardPayload(PDO $pdo, array $user): array
         'killboard' => $killboard,
         'stats' => $killboard['counts'],
         'clock' => $clock,
+        'chat_group' => $chatGroup,
+        'chat_messages' => $chatMessages,
         'duo' => [
             'teammate' => $teammate,
             'self_location' => $selfLocation,
@@ -519,9 +556,9 @@ try {
                  SET is_enrolled = 0,
                      game_status = 'withdrawn',
                      teammate_user_id = NULL,
-                     mode = CASE WHEN mode IS NULL THEN 'solo' ELSE mode END,
+                     mode = NULL,
                      pending_alert = '',
-                     registration_step = CASE WHEN payment_status = 'approved' THEN 'complete' ELSE registration_step END,
+                     registration_step = 'mode',
                      updated_at = :updated_at
                  WHERE id = :id"
             );
@@ -568,6 +605,30 @@ try {
         } catch (RuntimeException $e) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
+            }
+
+            if ($action === 'send_group_chat') {
+                $user = requireUser();
+                $body = trim((string) ($input['body'] ?? ''));
+                if ($body === '') {
+                    respond(false, ['message' => 'Message is required.'], 422);
+                }
+                if (mb_strlen($body) > 1000) {
+                    respond(false, ['message' => 'Message is too long.'], 422);
+                }
+
+                $group = userChatGroup($user);
+                $stmt = $pdo->prepare(
+                    'INSERT INTO group_chat_messages (user_id, full_name, group_name, body, created_at) VALUES (:user_id, :full_name, :group_name, :body, :created_at)'
+                );
+                $stmt->execute([
+                    'user_id' => (int) $user['id'],
+                    'full_name' => (string) $user['full_name'],
+                    'group_name' => $group,
+                    'body' => $body,
+                    'created_at' => nowUtc(),
+                ]);
+                respond(true);
             }
 
             respond(false, ['message' => $e->getMessage()], 409);
@@ -655,6 +716,10 @@ try {
         if ((string) $user['registration_step'] !== 'mode') {
             respond(false, ['message' => 'Mode can only be selected on the mode step.'], 422);
         }
+        $stage = gameStage();
+        if ((string) ($user['game_status'] ?? 'in') === 'withdrawn' && in_array($stage, ['live', 'paused'], true)) {
+            respond(false, ['message' => 'You can rejoin registration after the active game ends.'], 409);
+        }
 
         $next = $mode === 'solo' ? 'payment' : 'matchmaking';
         $stmt = $pdo->prepare("UPDATE users SET mode = :mode, teammate_user_id = NULL, registration_step = :registration_step, updated_at = :updated_at WHERE id = :id");
@@ -678,6 +743,10 @@ try {
         $user = requireUser();
         if (($user['mode'] ?? null) !== 'duo' || (string) $user['registration_step'] !== 'matchmaking') {
             respond(false, ['message' => 'You can only switch to solo during duo matchmaking.'], 422);
+        }
+        $stage = gameStage();
+        if ((string) ($user['game_status'] ?? 'in') === 'withdrawn' && in_array($stage, ['live', 'paused'], true)) {
+            respond(false, ['message' => 'You can rejoin registration after the active game ends.'], 409);
         }
 
         $pdo->beginTransaction();
@@ -761,6 +830,10 @@ try {
         if (($user['mode'] ?? null) !== 'duo' || (string) $user['registration_step'] !== 'matchmaking') {
             respond(false, ['message' => 'Invites can only be sent in duo matchmaking.'], 422);
         }
+        $stage = gameStage();
+        if ((string) ($user['game_status'] ?? 'in') === 'withdrawn' && in_array($stage, ['live', 'paused'], true)) {
+            respond(false, ['message' => 'You can rejoin registration after the active game ends.'], 409);
+        }
 
         $inviteeId = (int) ($input['invitee_user_id'] ?? 0);
         if ($inviteeId <= 0 || $inviteeId === (int) $user['id']) {
@@ -841,6 +914,10 @@ try {
         $user = requireUser();
         if ((string) $user['registration_step'] !== 'matchmaking') {
             respond(false, ['message' => 'Invite responses are only allowed in matchmaking.'], 422);
+        }
+        $stage = gameStage();
+        if ((string) ($user['game_status'] ?? 'in') === 'withdrawn' && in_array($stage, ['live', 'paused'], true)) {
+            respond(false, ['message' => 'You can rejoin registration after the active game ends.'], 409);
         }
         $inviteId = (int) ($input['invite_id'] ?? 0);
         $decision = strtolower(trim((string) ($input['decision'] ?? '')));

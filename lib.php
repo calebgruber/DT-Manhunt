@@ -157,6 +157,7 @@ function bootstrapSqlite(PDO $pdo): void
             sender_admin_user_id INTEGER,
             recipient_scope TEXT NOT NULL,
             body TEXT NOT NULL,
+            priority TEXT NOT NULL DEFAULT "info",
             metadata TEXT NOT NULL DEFAULT "",
             created_at TEXT NOT NULL,
             FOREIGN KEY (sender_admin_user_id) REFERENCES users(id)
@@ -189,6 +190,18 @@ function bootstrapSqlite(PDO $pdo): void
         )'
     );
 
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS group_chat_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            full_name TEXT NOT NULL,
+            group_name TEXT NOT NULL,
+            body TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )'
+    );
+
     if (!sqliteHasColumn($pdo, 'users', 'is_admin')) {
         $pdo->exec('ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0');
     }
@@ -213,12 +226,16 @@ function bootstrapSqlite(PDO $pdo): void
     if (!sqliteHasColumn($pdo, 'users', 'location_updated_at')) {
         $pdo->exec('ALTER TABLE users ADD COLUMN location_updated_at TEXT');
     }
+    if (!sqliteHasColumn($pdo, 'messages', 'priority')) {
+        $pdo->exec('ALTER TABLE messages ADD COLUMN priority TEXT NOT NULL DEFAULT "info"');
+    }
 
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_invites_inviter_status ON invites(inviter_user_id, status)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_invites_invitee_status ON invites(invitee_user_id, status)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_users_enrolled_status ON users(is_enrolled, game_status)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_message_recipients_user_read ON message_recipients(user_id, is_read)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_incidents_status_created ON incidents(status, created_at)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_group_chat_group_created ON group_chat_messages(group_name, created_at)');
 }
 
 function nowUtc(): string
