@@ -102,6 +102,8 @@ Payload example:
 Validation rules:
 - reject unknown `type`
 - reject missing `team_id` for `scope=team`
+- reject missing `user_id` for `scope=user`
+- reject missing/empty `user_ids` for `scope=users`
 - reject `location_update` from non-admin bridge source
 - reject duo matchmaking events when users are not in `duo` mode
 
@@ -160,11 +162,12 @@ Validation rules:
   "scope": "user",
   "user_id": 101,
   "data": {
-    "step": "matchmaking",
-    "resume_path": "/game/register/matchmaking"
+    "step": "matchmaking"
   }
 }
 ```
+
+Client navigation should be derived from `step` using the app's step-to-route map.
 
 ## 6) Client Handlers
 
