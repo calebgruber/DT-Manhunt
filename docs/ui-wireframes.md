@@ -1,7 +1,6 @@
 # Bootstrap 5 UI Wireframes (Spec)
 
-DB: voxelnodes_manhunt
-DB PW: t9K-ejDhnn0p(p%2
+DB credentials must be configured via environment/secure config and never committed to source control.
 ## Player Experience
 
 ## A) Login Screen

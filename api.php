@@ -299,7 +299,15 @@ try {
                 $update = $pdo->prepare('UPDATE invites SET status = "declined", updated_at = :updated_at WHERE id = :id');
                 $update->execute(['updated_at' => nowIso(), 'id' => $inviteId]);
 
-                $pdo->prepare('UPDATE users SET registration_step = "matchmaking", updated_at = :updated_at WHERE id = :inviter OR id = :invitee')
+                $pdo->prepare(
+                    'UPDATE users
+                     SET registration_step = CASE
+                        WHEN mode = "duo" AND registration_step IN ("matchmaking", "payment") THEN "matchmaking"
+                        ELSE registration_step
+                     END,
+                     updated_at = :updated_at
+                     WHERE id = :inviter OR id = :invitee'
+                )
                     ->execute([
                         'updated_at' => nowIso(),
                         'inviter' => (int) $invite['inviter_user_id'],

@@ -99,6 +99,7 @@ function renderStepper(step) {
 
 function showOnlyStep(step) {
   [el.profileStep, el.modeStep, el.matchmakingStep, el.paymentStep, el.completeStep].forEach((node) => node.classList.add('d-none'));
+  stopMatchmakingPolling();
 
   if (step === 'profile') {
     el.profileStep.classList.remove('d-none');
@@ -109,10 +110,8 @@ function showOnlyStep(step) {
     startMatchmakingPolling();
   } else if (step === 'payment') {
     el.paymentStep.classList.remove('d-none');
-    stopMatchmakingPolling();
   } else {
     el.completeStep.classList.remove('d-none');
-    stopMatchmakingPolling();
   }
 }
 
