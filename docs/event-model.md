@@ -185,11 +185,11 @@ Validation rules:
 Client navigation should be derived from `step` using the app's step-to-route map.
 
 Canonical step-to-route map:
-- `profile` → `/game/register/profile`
-- `mode` → `/game/register/mode`
-- `matchmaking` → `/game/register/matchmaking`
-- `payment` → `/game/register/payment`
-- `complete` → `/game/register/complete`
+- `profile` → `index.php` (show profile step panel)
+- `mode` → `index.php` (show mode step panel)
+- `matchmaking` → `index.php` (show matchmaking step panel)
+- `payment` → `index.php` (show payment step panel)
+- `complete` → `index.php` (show completion step panel)
 
 ## 6) Client Handlers
 

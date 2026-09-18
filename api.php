@@ -177,6 +177,7 @@ try {
                AND lower(display_name) LIKE lower(:q)
                AND (mode IS NULL OR mode = "duo")
                AND (teammate_user_id IS NULL)
+               AND registration_step IN ("profile", "mode", "matchmaking")
              ORDER BY display_name ASC
              LIMIT 20'
         );
@@ -212,6 +213,9 @@ try {
         }
         if ($target['teammate_user_id']) {
             reply(false, ['message' => 'User is already matched.'], 409);
+        }
+        if (!in_array((string) ($target['registration_step'] ?? ''), ['profile', 'mode', 'matchmaking'], true)) {
+            reply(false, ['message' => 'User is not available for matchmaking.'], 409);
         }
 
         $pendingCheck = $pdo->prepare('SELECT id FROM invites WHERE status = "pending" AND inviter_user_id = :inviter LIMIT 1');
@@ -402,13 +406,22 @@ try {
             $stmt->execute(['updated_at' => nowIso(), 'id' => (int) $user['id']]);
 
             if (($user['mode'] ?? null) === 'duo' && $teammateId) {
-                $pairStateStmt = $pdo->prepare('SELECT id, payment_status FROM users WHERE id = :id OR id = :teammate_id');
+                $pairStateStmt = $pdo->prepare('SELECT id, payment_status, teammate_user_id FROM users WHERE id = :id OR id = :teammate_id');
                 $pairStateStmt->execute([
                     'id' => (int) $user['id'],
                     'teammate_id' => $teammateId,
                 ]);
                 $pairRows = $pairStateStmt->fetchAll();
-                $bothPaid = count($pairRows) === 2 && array_reduce(
+                $pairById = [];
+                foreach ($pairRows as $row) {
+                    $pairById[(int) $row['id']] = $row;
+                }
+
+                $isMutualPair = isset($pairById[(int) $user['id']], $pairById[$teammateId])
+                    && (int) ($pairById[(int) $user['id']]['teammate_user_id'] ?? 0) === $teammateId
+                    && (int) ($pairById[$teammateId]['teammate_user_id'] ?? 0) === (int) $user['id'];
+
+                $bothPaid = $isMutualPair && array_reduce(
                     $pairRows,
                     static fn (bool $carry, array $row): bool => $carry && (($row['payment_status'] ?? '') === 'paid'),
                     true
