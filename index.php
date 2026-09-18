@@ -43,6 +43,9 @@ $concentrationOptions = $registrationOptions['concentration_options'];
           </div>
         </div>
         <div class="navbar-nav flex-row order-md-last">
+          <a id="adminLink" href="/admin/" class="btn btn-outline-secondary d-none me-2">
+            <i class="ti ti-settings me-1"></i>Admin
+          </a>
           <button id="logoutBtn" class="btn btn-outline-secondary d-none" type="button">
             <i class="ti ti-logout me-1"></i>Logout
           </button>
@@ -218,8 +221,13 @@ $concentrationOptions = $registrationOptions['concentration_options'];
                 <article id="paymentStep" class="card d-none step-pane">
                   <div class="card-body">
                     <h2 class="h3 mb-2">Payment</h2>
-                    <p class="text-secondary mb-3">Complete payment to finish registration.</p>
+                    <p class="text-secondary mb-3">Submit payment, then wait for admin approval.</p>
                     <div id="paymentInfo" class="mb-4"></div>
+                    <div id="paymentQrWrap" class="mb-4 d-none">
+                      <h3 class="h5 mb-2">Pay with Venmo</h3>
+                      <img id="paymentQrImage" class="img-thumbnail mb-2 qr-image" alt="Venmo QR code">
+                      <div><a id="paymentVenmoLink" href="#" target="_blank" rel="noopener noreferrer">Open Venmo link</a></div>
+                    </div>
                     <button id="completePaymentBtn" class="btn btn-success btn-lg w-100" type="button">Mark Payment Complete</button>
                   </div>
                 </article>

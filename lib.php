@@ -87,6 +87,18 @@ function db(): PDO
     return $pdo;
 }
 
+function sqliteHasColumn(PDO $pdo, string $table, string $column): bool
+{
+    $stmt = $pdo->query('PRAGMA table_info(' . $table . ')');
+    foreach ($stmt->fetchAll() as $row) {
+        if ((string) ($row['name'] ?? '') === $column) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 function bootstrapSqlite(PDO $pdo): void
 {
     $pdo->exec(
@@ -103,6 +115,7 @@ function bootstrapSqlite(PDO $pdo): void
             registration_step TEXT NOT NULL DEFAULT "profile",
             teammate_user_id INTEGER,
             payment_status TEXT NOT NULL DEFAULT "pending",
+            is_admin INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             FOREIGN KEY (teammate_user_id) REFERENCES users(id)
@@ -121,6 +134,18 @@ function bootstrapSqlite(PDO $pdo): void
             FOREIGN KEY (invitee_user_id) REFERENCES users(id)
         )'
     );
+
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS app_settings (
+            setting_key TEXT PRIMARY KEY,
+            setting_value TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )'
+    );
+
+    if (!sqliteHasColumn($pdo, 'users', 'is_admin')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0');
+    }
 
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_invites_inviter_status ON invites(inviter_user_id, status)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_invites_invitee_status ON invites(invitee_user_id, status)');
@@ -168,6 +193,33 @@ function registrationOptions(): array
     ];
 }
 
+function configuredAdminPhones(): array
+{
+    $config = appConfig();
+    $adminConfig = is_array($config['admin'] ?? null) ? $config['admin'] : [];
+    $phones = [];
+    foreach (($adminConfig['allowed_phone_numbers'] ?? []) as $rawPhone) {
+        $phone = normalizePhone((string) $rawPhone);
+        if (isValidPhone($phone)) {
+            $phones[$phone] = $phone;
+        }
+    }
+
+    return array_values($phones);
+}
+
+function userIsAdmin(array $user): bool
+{
+    if ((int) ($user['is_admin'] ?? 0) === 1) {
+        return true;
+    }
+    $phone = normalizePhone((string) ($user['phone'] ?? ''));
+    if ($phone === '') {
+        return false;
+    }
+    return in_array($phone, configuredAdminPhones(), true);
+}
+
 function currentUser(): ?array
 {
     $id = isset($_SESSION['user_id']) ? (int) $_SESSION['user_id'] : 0;
@@ -178,8 +230,24 @@ function currentUser(): ?array
     $stmt = db()->prepare('SELECT * FROM users WHERE id = :id');
     $stmt->execute(['id' => $id]);
     $user = $stmt->fetch();
-
     return $user ?: null;
+}
+
+function currentAdminUser(): ?array
+{
+    $id = isset($_SESSION['admin_user_id']) ? (int) $_SESSION['admin_user_id'] : 0;
+    if ($id <= 0) {
+        return null;
+    }
+
+    $stmt = db()->prepare('SELECT * FROM users WHERE id = :id');
+    $stmt->execute(['id' => $id]);
+    $admin = $stmt->fetch();
+    if (!$admin || !userIsAdmin($admin)) {
+        return null;
+    }
+
+    return $admin;
 }
 
 function requireUser(): array
@@ -195,6 +263,19 @@ function requireUser(): array
     return $user;
 }
 
+function requireAdmin(): array
+{
+    $admin = currentAdminUser();
+    if (!$admin) {
+        http_response_code(401);
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => false, 'message' => 'Admin authorization required']);
+        exit;
+    }
+
+    return $admin;
+}
+
 function userPublic(array $user): array
 {
     return [
@@ -208,6 +289,17 @@ function userPublic(array $user): array
         'registration_step' => (string) $user['registration_step'],
         'teammate_user_id' => $user['teammate_user_id'] ? (int) $user['teammate_user_id'] : null,
         'payment_status' => (string) $user['payment_status'],
+        'is_admin' => userIsAdmin($user),
+    ];
+}
+
+function adminPublic(array $user): array
+{
+    return [
+        'id' => (int) $user['id'],
+        'full_name' => (string) $user['full_name'],
+        'phone' => (string) $user['phone'],
+        'is_admin' => userIsAdmin($user),
     ];
 }
 
@@ -220,7 +312,6 @@ function teammateFor(?int $userId): ?array
     $stmt = db()->prepare('SELECT id, first_name, last_name, full_name FROM users WHERE id = :id');
     $stmt->execute(['id' => $userId]);
     $mate = $stmt->fetch();
-
     if (!$mate) {
         return null;
     }
@@ -237,4 +328,54 @@ function canBeMatched(array $user): bool
 {
     return in_array((string) ($user['registration_step'] ?? ''), ['profile', 'mode', 'matchmaking'], true)
         && ($user['teammate_user_id'] ?? null) === null;
+}
+
+function appSetting(string $key, string $default = ''): string
+{
+    $stmt = db()->prepare('SELECT setting_value FROM app_settings WHERE setting_key = :key LIMIT 1');
+    $stmt->execute(['key' => $key]);
+    $row = $stmt->fetch();
+    if (!$row) {
+        return $default;
+    }
+
+    return (string) $row['setting_value'];
+}
+
+function saveAppSetting(string $key, string $value): void
+{
+    $pdo = db();
+    $updatedAt = nowUtc();
+    $update = $pdo->prepare('UPDATE app_settings SET setting_value = :value, updated_at = :updated_at WHERE setting_key = :key');
+    $update->execute([
+        'value' => $value,
+        'updated_at' => $updatedAt,
+        'key' => $key,
+    ]);
+    if ($update->rowCount() > 0) {
+        return;
+    }
+
+    try {
+        $insert = $pdo->prepare('INSERT INTO app_settings (setting_key, setting_value, updated_at) VALUES (:key, :value, :updated_at)');
+        $insert->execute([
+            'key' => $key,
+            'value' => $value,
+            'updated_at' => $updatedAt,
+        ]);
+    } catch (Throwable) {
+        $update->execute([
+            'value' => $value,
+            'updated_at' => $updatedAt,
+            'key' => $key,
+        ]);
+    }
+}
+
+function venmoLink(): string
+{
+    $config = appConfig();
+    $adminConfig = is_array($config['admin'] ?? null) ? $config['admin'] : [];
+    $default = trim((string) ($adminConfig['venmo_link'] ?? ''));
+    return trim(appSetting('venmo_link', $default));
 }

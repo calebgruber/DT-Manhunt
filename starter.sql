@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS users (
   mode ENUM('solo','duo') NULL,
   registration_step ENUM('profile','mode','matchmaking','payment','complete') NOT NULL DEFAULT 'profile',
   teammate_user_id BIGINT UNSIGNED NULL,
-  payment_status ENUM('pending','paid') NOT NULL DEFAULT 'pending',
+  payment_status ENUM('pending','submitted','approved') NOT NULL DEFAULT 'pending',
+  is_admin TINYINT(1) NOT NULL DEFAULT 0,
   created_at DATETIME NOT NULL,
   updated_at DATETIME NOT NULL,
   PRIMARY KEY (id),
@@ -34,4 +35,11 @@ CREATE TABLE IF NOT EXISTS invites (
   KEY idx_invites_invitee_status (invitee_user_id, status),
   CONSTRAINT fk_invites_inviter FOREIGN KEY (inviter_user_id) REFERENCES users(id) ON DELETE CASCADE,
   CONSTRAINT fk_invites_invitee FOREIGN KEY (invitee_user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS app_settings (
+  setting_key VARCHAR(120) NOT NULL,
+  setting_value TEXT NOT NULL,
+  updated_at DATETIME NOT NULL,
+  PRIMARY KEY (setting_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

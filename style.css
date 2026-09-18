@@ -27,7 +27,7 @@ body {
 }
 
 .card {
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: box-shadow 0.2s ease;
 }
 
 .btn {
@@ -84,10 +84,6 @@ body {
   margin-bottom: 1rem;
 }
 
-.step-pane.step-animate {
-  animation: stepIn 0.24s ease;
-}
-
 .mode-btn {
   min-height: 150px;
   display: flex;
@@ -102,7 +98,12 @@ body {
   border-radius: var(--tblr-border-radius);
   background: var(--tblr-bg-surface);
   padding: 0.75rem;
-  animation: fadeIn 0.2s ease;
+}
+
+.qr-image {
+  max-width: 220px;
+  width: 100%;
+  height: auto;
 }
 
 @media (max-width: 767.98px) {
@@ -135,17 +136,6 @@ body {
 
   .step {
     min-width: 0;
-  }
-}
-
-@keyframes stepIn {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
   }
 }
 

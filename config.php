@@ -35,4 +35,10 @@ return [
             'TD / PM',
         ],
     ],
+    'admin' => [
+        // Add normalized phone numbers for users allowed to access /admin.
+        'allowed_phone_numbers' => [],
+        // Default Venmo URL used before the admin updates live settings.
+        'venmo_link' => '',
+    ],
 ];

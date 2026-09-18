@@ -59,3 +59,12 @@ Typical setup:
 Registration dropdown config:
 - `registration.graduation_year_options` controls the year dropdown (admin-editable in config files)
 - `registration.concentration_options` controls the concentration dropdown values
+
+Admin config:
+- `admin.allowed_phone_numbers` controls which user phone numbers can log in at `/admin/`
+- `admin.venmo_link` is the default payment link (admins can update it live in `/admin/`)
+
+Payment flow:
+- Players submit payment from the payment step
+- Admins approve payments per user in `/admin/`
+- Registration completes only after approval (for duos, both users must be approved)

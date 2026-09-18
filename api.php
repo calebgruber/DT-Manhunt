@@ -23,6 +23,40 @@ function respond(bool $ok, array $payload = [], int $status = 200): void
     exit;
 }
 
+function findUser(PDO $pdo, int $userId): ?array
+{
+    $stmt = $pdo->prepare('SELECT * FROM users WHERE id = :id LIMIT 1');
+    $stmt->execute(['id' => $userId]);
+    $user = $stmt->fetch();
+    return $user ?: null;
+}
+
+function pairStatus(PDO $pdo, int $userId, int $teammateId): array
+{
+    $stmt = $pdo->prepare('SELECT id, payment_status, teammate_user_id FROM users WHERE id = :id OR id = :teammate_id');
+    $stmt->execute([
+        'id' => $userId,
+        'teammate_id' => $teammateId,
+    ]);
+    $rows = $stmt->fetchAll();
+    $map = [];
+    foreach ($rows as $row) {
+        $map[(int) $row['id']] = $row;
+    }
+
+    $isMutual = isset($map[$userId], $map[$teammateId])
+        && (int) ($map[$userId]['teammate_user_id'] ?? 0) === $teammateId
+        && (int) ($map[$teammateId]['teammate_user_id'] ?? 0) === $userId;
+    $bothApproved = $isMutual
+        && (string) ($map[$userId]['payment_status'] ?? '') === 'approved'
+        && (string) ($map[$teammateId]['payment_status'] ?? '') === 'approved';
+
+    return [
+        'is_mutual' => $isMutual,
+        'both_approved' => $bothApproved,
+    ];
+}
+
 $input = body();
 $action = (string) ($input['action'] ?? $_GET['action'] ?? '');
 $pdo = db();
@@ -58,18 +92,18 @@ try {
             respond(false, ['message' => 'Select a valid concentration.'], 422);
         }
 
-        $existing = $pdo->prepare("SELECT id FROM users WHERE phone = :phone LIMIT 1");
+        $existing = $pdo->prepare('SELECT id FROM users WHERE phone = :phone LIMIT 1');
         $existing->execute(['phone' => $phone]);
         if ($existing->fetch()) {
             respond(false, ['message' => 'Phone number already in use.'], 409);
         }
 
         $fullName = trim($firstName . ' ' . $lastName);
+        $isAdmin = in_array($phone, configuredAdminPhones(), true) ? 1 : 0;
         $now = nowUtc();
-
         $stmt = $pdo->prepare(
-            "INSERT INTO users (phone, pin_hash, first_name, last_name, full_name, graduation_year, concentration, mode, registration_step, payment_status, created_at, updated_at)
-             VALUES (:phone, :pin_hash, :first_name, :last_name, :full_name, :graduation_year, :concentration, NULL, 'profile', 'pending', :created_at, :updated_at)"
+            "INSERT INTO users (phone, pin_hash, first_name, last_name, full_name, graduation_year, concentration, mode, registration_step, teammate_user_id, payment_status, is_admin, created_at, updated_at)
+             VALUES (:phone, :pin_hash, :first_name, :last_name, :full_name, :graduation_year, :concentration, NULL, 'profile', NULL, 'pending', :is_admin, :created_at, :updated_at)"
         );
         $stmt->execute([
             'phone' => $phone,
@@ -79,6 +113,7 @@ try {
             'full_name' => $fullName,
             'graduation_year' => $graduationYear,
             'concentration' => $concentration,
+            'is_admin' => $isAdmin,
             'created_at' => $now,
             'updated_at' => $now,
         ]);
@@ -90,7 +125,6 @@ try {
     if ($action === 'login') {
         $phone = normalizePhone((string) ($input['phone'] ?? ''));
         $pin = trim((string) ($input['pin'] ?? ''));
-
         if ($phone === '' || $pin === '') {
             respond(false, ['message' => 'Phone and PIN are required.'], 422);
         }
@@ -98,10 +132,9 @@ try {
             respond(false, ['message' => 'Phone number must be 10 to 15 digits.'], 422);
         }
 
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE phone = :phone LIMIT 1");
+        $stmt = $pdo->prepare('SELECT * FROM users WHERE phone = :phone LIMIT 1');
         $stmt->execute(['phone' => $phone]);
         $user = $stmt->fetch();
-
         if (!$user || !password_verify($pin, (string) $user['pin_hash'])) {
             respond(false, ['message' => 'Invalid credentials.'], 401);
         }
@@ -115,11 +148,49 @@ try {
         respond(true);
     }
 
+    if ($action === 'admin_login') {
+        $phone = normalizePhone((string) ($input['phone'] ?? ''));
+        $pin = trim((string) ($input['pin'] ?? ''));
+        if ($phone === '' || $pin === '') {
+            respond(false, ['message' => 'Phone and PIN are required.'], 422);
+        }
+        if (!isValidPhone($phone)) {
+            respond(false, ['message' => 'Phone number must be 10 to 15 digits.'], 422);
+        }
+
+        $stmt = $pdo->prepare('SELECT * FROM users WHERE phone = :phone LIMIT 1');
+        $stmt->execute(['phone' => $phone]);
+        $user = $stmt->fetch();
+        if (!$user || !password_verify($pin, (string) $user['pin_hash']) || !userIsAdmin($user)) {
+            respond(false, ['message' => 'Invalid admin credentials.'], 401);
+        }
+
+        $_SESSION['admin_user_id'] = (int) $user['id'];
+        respond(true, [
+            'admin' => adminPublic($user),
+            'venmo_link' => venmoLink(),
+        ]);
+    }
+
+    if ($action === 'admin_logout') {
+        unset($_SESSION['admin_user_id']);
+        respond(true);
+    }
+
     if ($action === 'state') {
         $user = requireUser();
         respond(true, [
             'user' => userPublic($user),
             'teammate' => teammateFor($user['teammate_user_id'] ? (int) $user['teammate_user_id'] : null),
+            'venmo_link' => venmoLink(),
+        ]);
+    }
+
+    if ($action === 'admin_state') {
+        $admin = requireAdmin();
+        respond(true, [
+            'admin' => adminPublic($admin),
+            'venmo_link' => venmoLink(),
         ]);
     }
 
@@ -155,7 +226,10 @@ try {
         ]);
 
         $cancel = $pdo->prepare("UPDATE invites SET status = 'cancelled', updated_at = :updated_at WHERE status = 'pending' AND (inviter_user_id = :id OR invitee_user_id = :id)");
-        $cancel->execute(['updated_at' => nowUtc(), 'id' => (int) $user['id']]);
+        $cancel->execute([
+            'updated_at' => nowUtc(),
+            'id' => (int) $user['id'],
+        ]);
 
         respond(true, ['user' => userPublic(currentUser())]);
     }
@@ -169,7 +243,6 @@ try {
         $pdo->beginTransaction();
         try {
             $updatedAt = nowUtc();
-
             $updateUser = $pdo->prepare(
                 "UPDATE users
                  SET mode = 'solo',
@@ -182,7 +255,6 @@ try {
                 'updated_at' => $updatedAt,
                 'id' => (int) $user['id'],
             ]);
-
             $cancelInvites = $pdo->prepare(
                 "UPDATE invites
                  SET status = 'cancelled', updated_at = :updated_at
@@ -193,7 +265,6 @@ try {
                 'updated_at' => $updatedAt,
                 'id' => (int) $user['id'],
             ]);
-
             $pdo->commit();
             respond(true, ['user' => userPublic(currentUser())]);
         } catch (Throwable $e) {
@@ -209,7 +280,6 @@ try {
         if (($user['mode'] ?? null) !== 'duo' || (string) $user['registration_step'] !== 'matchmaking') {
             respond(false, ['message' => 'Search is only available in duo matchmaking.'], 422);
         }
-
         $query = trim((string) ($input['query'] ?? ''));
         if ($query === '') {
             respond(true, ['results' => []]);
@@ -257,9 +327,7 @@ try {
             respond(false, ['message' => 'Invalid invite target.'], 422);
         }
 
-        $targetStmt = $pdo->prepare("SELECT * FROM users WHERE id = :id LIMIT 1");
-        $targetStmt->execute(['id' => $inviteeId]);
-        $target = $targetStmt->fetch();
+        $target = findUser($pdo, $inviteeId);
         if (!$target) {
             respond(false, ['message' => 'User not found.'], 404);
         }
@@ -272,7 +340,6 @@ try {
         if ($selfPending->fetch()) {
             respond(false, ['message' => 'You already have a pending invite.'], 409);
         }
-
         $targetPending = $pdo->prepare("SELECT id FROM invites WHERE invitee_user_id = :id AND status = 'pending' LIMIT 1");
         $targetPending->execute(['id' => $inviteeId]);
         if ($targetPending->fetch()) {
@@ -286,13 +353,11 @@ try {
             'created_at' => nowUtc(),
             'updated_at' => nowUtc(),
         ]);
-
         respond(true);
     }
 
     if ($action === 'matchmaking_state') {
         $user = requireUser();
-
         $incomingStmt = $pdo->prepare(
             "SELECT i.id, i.created_at, i.inviter_user_id, u.full_name AS inviter_full_name
              FROM invites i
@@ -337,7 +402,6 @@ try {
         if ((string) $user['registration_step'] !== 'matchmaking') {
             respond(false, ['message' => 'Invite responses are only allowed in matchmaking.'], 422);
         }
-
         $inviteId = (int) ($input['invite_id'] ?? 0);
         $decision = strtolower(trim((string) ($input['decision'] ?? '')));
         if (!in_array($decision, ['accept', 'decline'], true)) {
@@ -346,10 +410,9 @@ try {
 
         $pdo->beginTransaction();
         try {
-            $inviteStmt = $pdo->prepare("SELECT * FROM invites WHERE id = :id LIMIT 1");
+            $inviteStmt = $pdo->prepare('SELECT * FROM invites WHERE id = :id LIMIT 1');
             $inviteStmt->execute(['id' => $inviteId]);
             $invite = $inviteStmt->fetch();
-
             if (!$invite || (int) $invite['invitee_user_id'] !== (int) $user['id']) {
                 throw new RuntimeException('Invite not found.');
             }
@@ -359,12 +422,8 @@ try {
 
             $inviterId = (int) $invite['inviter_user_id'];
             $inviteeId = (int) $invite['invitee_user_id'];
-            $userStmt = $pdo->prepare("SELECT * FROM users WHERE id = :id LIMIT 1");
-            $userStmt->execute(['id' => $inviterId]);
-            $inviter = $userStmt->fetch();
-            $userStmt->execute(['id' => $inviteeId]);
-            $invitee = $userStmt->fetch();
-
+            $inviter = findUser($pdo, $inviterId);
+            $invitee = findUser($pdo, $inviteeId);
             if (!$inviter || !$invitee) {
                 throw new RuntimeException('User state changed.');
             }
@@ -372,7 +431,6 @@ try {
             if ($decision === 'decline') {
                 $mark = $pdo->prepare("UPDATE invites SET status = 'declined', updated_at = :updated_at WHERE id = :id");
                 $mark->execute(['updated_at' => nowUtc(), 'id' => $inviteId]);
-
                 $rewind = $pdo->prepare(
                     "UPDATE users
                      SET registration_step = CASE
@@ -400,11 +458,9 @@ try {
 
                 $mark = $pdo->prepare("UPDATE invites SET status = 'accepted', updated_at = :updated_at WHERE id = :id");
                 $mark->execute(['updated_at' => nowUtc(), 'id' => $inviteId]);
-
                 $pairStmt = $pdo->prepare("UPDATE users SET teammate_user_id = :mate_id, registration_step = 'payment', updated_at = :updated_at WHERE id = :id");
                 $pairStmt->execute(['mate_id' => $inviteeId, 'updated_at' => nowUtc(), 'id' => $inviterId]);
                 $pairStmt->execute(['mate_id' => $inviterId, 'updated_at' => nowUtc(), 'id' => $inviteeId]);
-
                 $cancelStmt = $pdo->prepare(
                     "UPDATE invites
                      SET status = 'cancelled', updated_at = :updated_at
@@ -452,44 +508,308 @@ try {
 
         $pdo->beginTransaction();
         try {
-            $markPaid = $pdo->prepare("UPDATE users SET payment_status = 'paid', updated_at = :updated_at WHERE id = :id");
-            $markPaid->execute(['updated_at' => nowUtc(), 'id' => (int) $user['id']]);
+            $mark = $pdo->prepare(
+                "UPDATE users
+                 SET payment_status = CASE WHEN payment_status = 'approved' THEN 'approved' ELSE 'submitted' END,
+                     updated_at = :updated_at
+                 WHERE id = :id"
+            );
+            $mark->execute([
+                'updated_at' => nowUtc(),
+                'id' => (int) $user['id'],
+            ]);
 
-            if (($user['mode'] ?? null) === 'duo' && $teammateId) {
-                $pairStmt = $pdo->prepare("SELECT id, payment_status, teammate_user_id FROM users WHERE id = :id OR id = :teammate_id");
-                $pairStmt->execute(['id' => (int) $user['id'], 'teammate_id' => $teammateId]);
-                $rows = $pairStmt->fetchAll();
-                $map = [];
-                foreach ($rows as $row) {
-                    $map[(int) $row['id']] = $row;
-                }
+            $fresh = findUser($pdo, (int) $user['id']);
+            if (!$fresh) {
+                throw new RuntimeException('User not found.');
+            }
 
-                $isMutual = isset($map[(int) $user['id']], $map[$teammateId])
-                    && (int) ($map[(int) $user['id']]['teammate_user_id'] ?? 0) === $teammateId
-                    && (int) ($map[$teammateId]['teammate_user_id'] ?? 0) === (int) $user['id'];
-
-                $bothPaid = $isMutual
-                    && ((string) $map[(int) $user['id']]['payment_status'] === 'paid')
-                    && ((string) $map[$teammateId]['payment_status'] === 'paid');
-
-                if ($bothPaid) {
+            if (($fresh['mode'] ?? null) === 'duo' && $teammateId) {
+                $pair = pairStatus($pdo, (int) $fresh['id'], $teammateId);
+                if ($pair['both_approved']) {
                     $complete = $pdo->prepare("UPDATE users SET registration_step = 'complete', updated_at = :updated_at WHERE id = :id OR id = :teammate_id");
                     $complete->execute([
                         'updated_at' => nowUtc(),
-                        'id' => (int) $user['id'],
+                        'id' => (int) $fresh['id'],
                         'teammate_id' => $teammateId,
                     ]);
                 } else {
                     $hold = $pdo->prepare("UPDATE users SET registration_step = 'payment', updated_at = :updated_at WHERE id = :id");
-                    $hold->execute(['updated_at' => nowUtc(), 'id' => (int) $user['id']]);
+                    $hold->execute([
+                        'updated_at' => nowUtc(),
+                        'id' => (int) $fresh['id'],
+                    ]);
                 }
             } else {
-                $complete = $pdo->prepare("UPDATE users SET registration_step = 'complete', updated_at = :updated_at WHERE id = :id");
-                $complete->execute(['updated_at' => nowUtc(), 'id' => (int) $user['id']]);
+                if ((string) $fresh['payment_status'] === 'approved') {
+                    $complete = $pdo->prepare("UPDATE users SET registration_step = 'complete', updated_at = :updated_at WHERE id = :id");
+                    $complete->execute([
+                        'updated_at' => nowUtc(),
+                        'id' => (int) $fresh['id'],
+                    ]);
+                } else {
+                    $hold = $pdo->prepare("UPDATE users SET registration_step = 'payment', updated_at = :updated_at WHERE id = :id");
+                    $hold->execute([
+                        'updated_at' => nowUtc(),
+                        'id' => (int) $fresh['id'],
+                    ]);
+                }
             }
 
             $pdo->commit();
             respond(true, ['user' => userPublic(currentUser())]);
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    if ($action === 'admin_set_venmo_link') {
+        requireAdmin();
+        $venmo = trim((string) ($input['venmo_link'] ?? ''));
+        if ($venmo !== '') {
+            $valid = filter_var($venmo, FILTER_VALIDATE_URL) !== false;
+            $scheme = strtolower((string) parse_url($venmo, PHP_URL_SCHEME));
+            if (!$valid || !in_array($scheme, ['http', 'https', 'venmo'], true)) {
+                respond(false, ['message' => 'Enter a valid Venmo URL.'], 422);
+            }
+        }
+        saveAppSetting('venmo_link', $venmo);
+        respond(true, ['venmo_link' => venmoLink()]);
+    }
+
+    if ($action === 'admin_list_payments') {
+        requireAdmin();
+        $stmt = $pdo->query(
+            "SELECT id, full_name, phone, mode, registration_step, payment_status, updated_at
+             FROM users
+             WHERE payment_status IN ('pending', 'submitted') OR registration_step = 'payment'
+             ORDER BY updated_at DESC, id DESC"
+        );
+        $payments = array_map(static fn (array $row): array => [
+            'id' => (int) $row['id'],
+            'full_name' => (string) $row['full_name'],
+            'phone' => (string) $row['phone'],
+            'mode' => $row['mode'] ? (string) $row['mode'] : null,
+            'registration_step' => (string) $row['registration_step'],
+            'payment_status' => (string) $row['payment_status'],
+            'updated_at' => (string) $row['updated_at'],
+        ], $stmt->fetchAll());
+        respond(true, ['payments' => $payments]);
+    }
+
+    if ($action === 'admin_approve_payment') {
+        requireAdmin();
+        $userId = (int) ($input['user_id'] ?? 0);
+        if ($userId <= 0) {
+            respond(false, ['message' => 'Invalid user.'], 422);
+        }
+
+        $pdo->beginTransaction();
+        try {
+            $target = findUser($pdo, $userId);
+            if (!$target) {
+                throw new RuntimeException('User not found.');
+            }
+
+            $approve = $pdo->prepare("UPDATE users SET payment_status = 'approved', updated_at = :updated_at WHERE id = :id");
+            $approve->execute([
+                'updated_at' => nowUtc(),
+                'id' => $userId,
+            ]);
+
+            $fresh = findUser($pdo, $userId);
+            if (!$fresh) {
+                throw new RuntimeException('User not found.');
+            }
+            $teammateId = $fresh['teammate_user_id'] ? (int) $fresh['teammate_user_id'] : null;
+            if (($fresh['mode'] ?? null) === 'duo' && $teammateId) {
+                $pair = pairStatus($pdo, (int) $fresh['id'], $teammateId);
+                if ($pair['both_approved']) {
+                    $complete = $pdo->prepare("UPDATE users SET registration_step = 'complete', updated_at = :updated_at WHERE id = :id OR id = :teammate_id");
+                    $complete->execute([
+                        'updated_at' => nowUtc(),
+                        'id' => (int) $fresh['id'],
+                        'teammate_id' => $teammateId,
+                    ]);
+                } else {
+                    $hold = $pdo->prepare("UPDATE users SET registration_step = 'payment', updated_at = :updated_at WHERE id = :id");
+                    $hold->execute([
+                        'updated_at' => nowUtc(),
+                        'id' => (int) $fresh['id'],
+                    ]);
+                }
+            } else {
+                $complete = $pdo->prepare("UPDATE users SET registration_step = 'complete', updated_at = :updated_at WHERE id = :id");
+                $complete->execute([
+                    'updated_at' => nowUtc(),
+                    'id' => (int) $fresh['id'],
+                ]);
+            }
+
+            $pdo->commit();
+            respond(true);
+        } catch (RuntimeException $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            $code = $e->getMessage() === 'User not found.' ? 404 : 409;
+            respond(false, ['message' => $e->getMessage()], $code);
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    if ($action === 'admin_list_matches') {
+        requireAdmin();
+        $stmt = $pdo->query(
+            "SELECT u.id AS user_a_id, u.full_name AS user_a_name, u.payment_status AS user_a_payment, u.registration_step AS user_a_step,
+                    m.id AS user_b_id, m.full_name AS user_b_name, m.payment_status AS user_b_payment, m.registration_step AS user_b_step
+             FROM users u
+             JOIN users m ON m.id = u.teammate_user_id
+             WHERE u.teammate_user_id IS NOT NULL
+               AND m.teammate_user_id = u.id
+               AND u.id < m.id
+             ORDER BY u.updated_at DESC"
+        );
+        $matches = array_map(static fn (array $row): array => [
+            'user_a_id' => (int) $row['user_a_id'],
+            'user_a_name' => (string) $row['user_a_name'],
+            'user_a_payment' => (string) $row['user_a_payment'],
+            'user_a_step' => (string) $row['user_a_step'],
+            'user_b_id' => (int) $row['user_b_id'],
+            'user_b_name' => (string) $row['user_b_name'],
+            'user_b_payment' => (string) $row['user_b_payment'],
+            'user_b_step' => (string) $row['user_b_step'],
+        ], $stmt->fetchAll());
+        respond(true, ['matches' => $matches]);
+    }
+
+    if ($action === 'admin_reset_match') {
+        requireAdmin();
+        $userId = (int) ($input['user_id'] ?? 0);
+        if ($userId <= 0) {
+            respond(false, ['message' => 'Invalid user.'], 422);
+        }
+
+        $pdo->beginTransaction();
+        try {
+            $user = findUser($pdo, $userId);
+            if (!$user) {
+                throw new RuntimeException('User not found.');
+            }
+            $teammateId = $user['teammate_user_id'] ? (int) $user['teammate_user_id'] : 0;
+            if ($teammateId <= 0) {
+                throw new RuntimeException('User is not currently matched.');
+            }
+            $teammate = findUser($pdo, $teammateId);
+            if (!$teammate || (int) ($teammate['teammate_user_id'] ?? 0) !== (int) $user['id']) {
+                throw new RuntimeException('Match is no longer mutual.');
+            }
+
+            $updatedAt = nowUtc();
+            $reset = $pdo->prepare(
+                "UPDATE users
+                 SET teammate_user_id = NULL,
+                     mode = 'duo',
+                     registration_step = 'matchmaking',
+                     updated_at = :updated_at
+                 WHERE id = :id OR id = :teammate_id"
+            );
+            $reset->execute([
+                'updated_at' => $updatedAt,
+                'id' => (int) $user['id'],
+                'teammate_id' => $teammateId,
+            ]);
+            $cancel = $pdo->prepare(
+                "UPDATE invites
+                 SET status = 'cancelled', updated_at = :updated_at
+                 WHERE status = 'pending'
+                   AND (inviter_user_id = :id OR inviter_user_id = :teammate_id OR invitee_user_id = :id OR invitee_user_id = :teammate_id)"
+            );
+            $cancel->execute([
+                'updated_at' => $updatedAt,
+                'id' => (int) $user['id'],
+                'teammate_id' => $teammateId,
+            ]);
+
+            $pdo->commit();
+            respond(true);
+        } catch (RuntimeException $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            $code = $e->getMessage() === 'User not found.' ? 404 : 409;
+            respond(false, ['message' => $e->getMessage()], $code);
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    if ($action === 'admin_switch_match_to_solo') {
+        requireAdmin();
+        $userId = (int) ($input['user_id'] ?? 0);
+        if ($userId <= 0) {
+            respond(false, ['message' => 'Invalid user.'], 422);
+        }
+
+        $pdo->beginTransaction();
+        try {
+            $user = findUser($pdo, $userId);
+            if (!$user) {
+                throw new RuntimeException('User not found.');
+            }
+            $teammateId = $user['teammate_user_id'] ? (int) $user['teammate_user_id'] : 0;
+            if ($teammateId <= 0) {
+                throw new RuntimeException('User is not currently matched.');
+            }
+            $teammate = findUser($pdo, $teammateId);
+            if (!$teammate || (int) ($teammate['teammate_user_id'] ?? 0) !== (int) $user['id']) {
+                throw new RuntimeException('Match is no longer mutual.');
+            }
+
+            $updatedAt = nowUtc();
+            $switch = $pdo->prepare(
+                "UPDATE users
+                 SET teammate_user_id = NULL,
+                     mode = 'solo',
+                     registration_step = CASE WHEN payment_status = 'approved' THEN 'complete' ELSE 'payment' END,
+                     updated_at = :updated_at
+                 WHERE id = :id OR id = :teammate_id"
+            );
+            $switch->execute([
+                'updated_at' => $updatedAt,
+                'id' => (int) $user['id'],
+                'teammate_id' => $teammateId,
+            ]);
+            $cancel = $pdo->prepare(
+                "UPDATE invites
+                 SET status = 'cancelled', updated_at = :updated_at
+                 WHERE status = 'pending'
+                   AND (inviter_user_id = :id OR inviter_user_id = :teammate_id OR invitee_user_id = :id OR invitee_user_id = :teammate_id)"
+            );
+            $cancel->execute([
+                'updated_at' => $updatedAt,
+                'id' => (int) $user['id'],
+                'teammate_id' => $teammateId,
+            ]);
+
+            $pdo->commit();
+            respond(true);
+        } catch (RuntimeException $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            $code = $e->getMessage() === 'User not found.' ? 404 : 409;
+            respond(false, ['message' => $e->getMessage()], $code);
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();

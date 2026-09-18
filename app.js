@@ -3,14 +3,17 @@ const steps = ['profile', 'mode', 'matchmaking', 'payment', 'complete'];
 const state = {
   user: window.__BOOT_USER__ || null,
   matchmaking: null,
+  venmoLink: '',
   pollTimer: null,
   pollBusy: false,
   activeRequests: 0,
+  currentStep: null,
 };
 
 const ui = {
   authSection: document.getElementById('authSection'),
   appSection: document.getElementById('appSection'),
+  adminLink: document.getElementById('adminLink'),
   logoutBtn: document.getElementById('logoutBtn'),
   loginPanel: document.getElementById('loginPanel'),
   registerPanel: document.getElementById('registerPanel'),
@@ -31,6 +34,9 @@ const ui = {
   incomingInvites: document.getElementById('incomingInvites'),
   teammateCard: document.getElementById('teammateCard'),
   paymentInfo: document.getElementById('paymentInfo'),
+  paymentQrWrap: document.getElementById('paymentQrWrap'),
+  paymentQrImage: document.getElementById('paymentQrImage'),
+  paymentVenmoLink: document.getElementById('paymentVenmoLink'),
   completePaymentBtn: document.getElementById('completePaymentBtn'),
   switchSoloBtn: document.getElementById('switchSoloBtn'),
   toastContainer: document.getElementById('toastContainer'),
@@ -135,8 +141,10 @@ function renderStepper(step) {
 }
 
 function showStep(step) {
+  if (state.currentStep === step) {
+    return;
+  }
   [ui.profileStep, ui.modeStep, ui.matchmakingStep, ui.paymentStep, ui.completeStep].forEach((el) => el.classList.add('d-none'));
-  [ui.profileStep, ui.modeStep, ui.matchmakingStep, ui.paymentStep, ui.completeStep].forEach((el) => el.classList.remove('step-animate'));
 
   let activeStep = ui.completeStep;
   if (step === 'profile') activeStep = ui.profileStep;
@@ -145,7 +153,7 @@ function showStep(step) {
   else if (step === 'payment') activeStep = ui.paymentStep;
 
   activeStep.classList.remove('d-none');
-  requestAnimationFrame(() => activeStep.classList.add('step-animate'));
+  state.currentStep = step;
 }
 
 function renderUser() {
@@ -153,9 +161,11 @@ function renderUser() {
   ui.authSection.classList.toggle('d-none', loggedIn);
   ui.appSection.classList.toggle('d-none', !loggedIn);
   ui.logoutBtn.classList.toggle('d-none', !loggedIn);
+  ui.adminLink.classList.toggle('d-none', !loggedIn || !state.user?.is_admin);
 
   if (!loggedIn) {
     stopPolling();
+    state.currentStep = null;
     return;
   }
 
@@ -169,9 +179,34 @@ function renderUser() {
   const modeLine = document.createElement('div');
   modeLine.className = 'small text-muted';
   modeLine.textContent = `Mode: ${state.user.mode || 'Not selected'}`;
+  const statusLine = document.createElement('div');
+  statusLine.className = 'small mt-1';
+  const paymentStatus = state.user.payment_status || 'pending';
+  statusLine.textContent = `Payment status: ${paymentStatus}`;
   const mateLine = document.createElement('div');
   mateLine.textContent = state.matchmaking?.teammate ? `Teammate: ${state.matchmaking.teammate.full_name}` : 'Teammate: none';
-  ui.paymentInfo.append(modeLine, mateLine);
+  ui.paymentInfo.append(modeLine, statusLine, mateLine);
+
+  const venmo = (state.venmoLink || '').trim();
+  if (venmo) {
+    ui.paymentQrWrap.classList.remove('d-none');
+    ui.paymentVenmoLink.href = venmo;
+    ui.paymentVenmoLink.textContent = venmo;
+    ui.paymentQrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(venmo)}`;
+  } else {
+    ui.paymentQrWrap.classList.add('d-none');
+  }
+
+  if (paymentStatus === 'approved') {
+    ui.completePaymentBtn.disabled = true;
+    ui.completePaymentBtn.textContent = 'Payment Approved';
+  } else if (paymentStatus === 'submitted') {
+    ui.completePaymentBtn.disabled = true;
+    ui.completePaymentBtn.textContent = 'Payment Submitted (Awaiting Approval)';
+  } else {
+    ui.completePaymentBtn.disabled = false;
+    ui.completePaymentBtn.textContent = 'Submit Payment for Approval';
+  }
 
   startPolling();
 }
@@ -181,6 +216,7 @@ async function refreshState(quiet = false) {
   const data = await api('state', {}, { loading: !quiet, loadingText: 'Syncing account...' });
   state.user = data.user;
   state.matchmaking = { teammate: data.teammate };
+  state.venmoLink = data.venmo_link || '';
   renderUser();
 }
 
@@ -335,6 +371,7 @@ async function pollTick() {
     const data = await api('state', {}, { loading: false });
     state.user = data.user;
     state.matchmaking = { teammate: data.teammate };
+    state.venmoLink = data.venmo_link || '';
     renderUser();
   } catch (error) {
     // keep quiet during background polling
@@ -442,7 +479,7 @@ function wireEvents() {
       const data = await api('complete_payment', {}, { loadingText: 'Finalizing payment...' });
       state.user = data.user;
       await refreshState();
-      toast('Payment saved', 'success');
+      toast('Payment submitted for admin approval', 'success');
     } catch (error) {
       toast(error.message, 'danger');
     }
