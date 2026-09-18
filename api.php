@@ -585,7 +585,7 @@ try {
         $stmt = $pdo->query(
             "SELECT id, full_name, phone, mode, registration_step, payment_status, updated_at
              FROM users
-             WHERE payment_status IN ('pending', 'submitted') OR registration_step = 'payment'
+             WHERE payment_status IN ('pending', 'submitted', 'approved') OR registration_step IN ('payment', 'complete')
              ORDER BY updated_at DESC, id DESC"
         );
         $payments = array_map(static fn (array $row): array => [
@@ -647,6 +647,54 @@ try {
                     'updated_at' => nowUtc(),
                     'id' => (int) $fresh['id'],
                 ]);
+            }
+
+            $pdo->commit();
+            respond(true);
+        } catch (RuntimeException $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            $code = $e->getMessage() === 'User not found.' ? 404 : 409;
+            respond(false, ['message' => $e->getMessage()], $code);
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    if ($action === 'admin_reset_payment') {
+        requireAdmin();
+        $userId = (int) ($input['user_id'] ?? 0);
+        if ($userId <= 0) {
+            respond(false, ['message' => 'Invalid user.'], 422);
+        }
+
+        $pdo->beginTransaction();
+        try {
+            $user = findUser($pdo, $userId);
+            if (!$user) {
+                throw new RuntimeException('User not found.');
+            }
+
+            $reset = $pdo->prepare("UPDATE users SET payment_status = 'pending', registration_step = 'payment', updated_at = :updated_at WHERE id = :id");
+            $reset->execute([
+                'updated_at' => nowUtc(),
+                'id' => $userId,
+            ]);
+
+            $teammateId = $user['teammate_user_id'] ? (int) $user['teammate_user_id'] : 0;
+            if (($user['mode'] ?? null) === 'duo' && $teammateId > 0) {
+                $teammate = findUser($pdo, $teammateId);
+                if ($teammate && (int) ($teammate['teammate_user_id'] ?? 0) === $userId) {
+                    $rewindMate = $pdo->prepare("UPDATE users SET registration_step = 'payment', updated_at = :updated_at WHERE id = :id");
+                    $rewindMate->execute([
+                        'updated_at' => nowUtc(),
+                        'id' => $teammateId,
+                    ]);
+                }
             }
 
             $pdo->commit();

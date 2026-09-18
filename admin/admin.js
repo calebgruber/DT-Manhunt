@@ -62,12 +62,12 @@ function renderPayments(payments) {
     stepTd.textContent = payment.registration_step;
 
     const actionTd = document.createElement('td');
-    const button = document.createElement('button');
-    button.className = 'btn btn-sm btn-success';
-    button.type = 'button';
-    button.textContent = 'Approve';
-    button.disabled = payment.payment_status === 'approved';
-    button.addEventListener('click', async () => {
+    const approveBtn = document.createElement('button');
+    approveBtn.className = 'btn btn-sm btn-success me-2';
+    approveBtn.type = 'button';
+    approveBtn.textContent = 'Approve';
+    approveBtn.disabled = payment.payment_status === 'approved';
+    approveBtn.addEventListener('click', async () => {
       try {
         await api('admin_approve_payment', { user_id: payment.id });
         notice(`Approved payment for ${payment.full_name}`, 'success');
@@ -76,7 +76,22 @@ function renderPayments(payments) {
         notice(error.message, 'danger');
       }
     });
-    actionTd.appendChild(button);
+
+    const resetBtn = document.createElement('button');
+    resetBtn.className = 'btn btn-sm btn-outline-warning';
+    resetBtn.type = 'button';
+    resetBtn.textContent = 'Reset to Pending';
+    resetBtn.disabled = payment.payment_status === 'pending';
+    resetBtn.addEventListener('click', async () => {
+      try {
+        await api('admin_reset_payment', { user_id: payment.id });
+        notice(`Reset payment to pending for ${payment.full_name}`, 'success');
+        await refreshAdminData();
+      } catch (error) {
+        notice(error.message, 'danger');
+      }
+    });
+    actionTd.append(approveBtn, resetBtn);
 
     tr.append(userTd, statusTd, stepTd, actionTd);
     ui.paymentsBody.appendChild(tr);

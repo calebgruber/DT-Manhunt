@@ -73,4 +73,5 @@ Default seeded test admin:
 Payment flow:
 - Players submit payment from the payment step
 - Admins approve payments per user in `/admin/`
+- Admins can reset approvals back to pending
 - Registration completes only after approval (for duos, both users must be approved)
