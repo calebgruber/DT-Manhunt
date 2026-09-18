@@ -47,6 +47,14 @@ Required additional field for team scope:
 - `team_status_update`
 - `admin_system_notice`
 
+### Registration + matchmaking realtime
+- `duo_invite_sent`
+- `duo_invite_received`
+- `duo_invite_declined`
+- `duo_invite_accepted`
+- `duo_match_confirmed`
+- `registration_step_changed`
+
 ## 4) PHP → Node Bridge Contract
 
 `POST /event`
@@ -73,8 +81,69 @@ Validation rules:
 - reject unknown `type`
 - reject missing `team_id` for `scope=team`
 - reject `location_update` from non-admin bridge source
+- reject duo matchmaking events when users are not in `duo` mode
 
-## 5) Client Handlers
+## 5) Matchmaking Event Payloads
+
+`duo_invite_sent` / `duo_invite_received`
+
+```json
+{
+  "type": "duo_invite_received",
+  "scope": "user",
+  "data": {
+    "invite_id": "inv_123",
+    "from_user_id": 101,
+    "from_display_name": "Alex",
+    "to_user_id": 202,
+    "status": "pending"
+  }
+}
+```
+
+`duo_invite_declined`
+
+```json
+{
+  "type": "duo_invite_declined",
+  "scope": "user",
+  "data": {
+    "invite_id": "inv_123",
+    "declined_by_user_id": 202,
+    "next_action": "select_new_teammate"
+  }
+}
+```
+
+`duo_invite_accepted` / `duo_match_confirmed`
+
+```json
+{
+  "type": "duo_match_confirmed",
+  "scope": "users",
+  "data": {
+    "invite_id": "inv_123",
+    "user_ids": [101, 202],
+    "next_step": "payment"
+  }
+}
+```
+
+`registration_step_changed`
+
+```json
+{
+  "type": "registration_step_changed",
+  "scope": "user",
+  "data": {
+    "user_id": 101,
+    "step": "matchmaking",
+    "resume_path": "/game/register/matchmaking"
+  }
+}
+```
+
+## 6) Client Handlers
 
 ### Player client should handle
 - `announcement`
@@ -83,13 +152,18 @@ Validation rules:
 - `killboard_update`
 - `message_to_team` (own team only)
 - `team_eliminated` (global, with own-team highlighting)
+- `duo_invite_received`
+- `duo_invite_declined`
+- `duo_invite_accepted`
+- `duo_match_confirmed`
+- `registration_step_changed`
 
 ### Admin client should handle
 - all player events plus:
 - `location_update`
 - `team_status_update`
 
-## 6) Suggested UI Binding Map
+## 7) Suggested UI Binding Map
 
 - `announcement` → top alert banner
 - `stage_change` → stage badge/card
@@ -97,3 +171,13 @@ Validation rules:
 - `killboard_update` → leaderboard card/table
 - `message_to_team` → inbox/toast for target team
 - `location_update` → live map marker updates
+- `duo_invite_received` → live invite modal (accept/decline)
+- `duo_invite_declined` → teammate selection prompt reset
+- `duo_match_confirmed` → automatic navigation to payment step
+
+## 8) Login/Logout + Resume Rules
+
+- every registration write persists current step and payload in MySQL
+- login must query saved step and route user to that exact step
+- logout must only invalidate session tokens, not persisted registration state
+- if duo invite is pending during logout, restore invite state after next login

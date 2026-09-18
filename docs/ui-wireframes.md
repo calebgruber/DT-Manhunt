@@ -7,15 +7,44 @@
 - CTA: `Sign In`
 - Secondary CTA: `Register`
 - Mobile-first single-card centered layout
+- Saved progress card shown after login: `Resume registration at Step X`
 
 ## B) Registration Screen
-- Toggle: `Individual` / `Duo`
-- Fields:
-  - team name
-  - player 1 phone + PIN
-  - player 2 phone + PIN (duo only)
-  - payment confirmation/reference
-- CTA: `Create Team`
+Top sticky stepper (large, mobile friendly):
+1. Profile
+2. Mode
+3. Matchmaking (duo only)
+4. Payment
+5. Complete
+
+Step 1: Profile fields
+- full name
+- display name (searchable)
+- phone number
+- PIN
+- graduation year
+- concentration
+- optional profile extras (as configured)
+
+Step 2: Mode select
+- Large icon button: `Solo`
+- Large icon button: `Duo`
+- Buttons are full-width on mobile
+
+Step 3 (duo only): Matchmaking screen
+- Search box: `Search teammate by name`
+- Search results list with large `Invite` action button
+- Live invite status chip: `Pending`, `Accepted`, `Declined`
+- On decline:
+  - inviter sees prompt to choose new teammate
+  - invite recipient returns to teammate selection
+- On accept:
+  - both users auto-advance to payment step
+
+Step 4: Payment screen
+- payment amount/summary
+- payment method UI
+- completion state after successful payment
 
 ## C) Player Dashboard
 Top section:
@@ -34,6 +63,7 @@ Background behavior:
 - geolocation permission prompt on first load
 - silent location updates every ~10s
 - socket reconnect banner on disconnect
+- if user logs out and returns, app resumes their saved registration or game state
 
 ## Admin Experience
 
@@ -68,3 +98,4 @@ Additional cards:
   - eliminated = danger
   - warning/offline = warning
 - touch-first controls (large tap targets)
+- stepper and primary action buttons remain sticky/visible on small screens
