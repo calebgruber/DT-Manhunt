@@ -24,6 +24,14 @@ $concentrationOptions = $registrationOptions['concentration_options'];
   <link href="/style.css" rel="stylesheet">
 </head>
 <body>
+  <div id="loadingOverlay" class="loading-overlay">
+    <div class="card loading-card">
+      <div class="card-body text-center">
+        <div class="spinner-border text-primary mb-3" role="status" aria-hidden="true"></div>
+        <div id="loadingText" class="fw-semibold">Loading...</div>
+      </div>
+    </div>
+  </div>
   <div class="page">
     <header class="navbar navbar-expand-md d-print-none">
       <div class="container-xl">
@@ -144,7 +152,6 @@ $concentrationOptions = $registrationOptions['concentration_options'];
                     <div id="stepper" class="stepper"></div>
                   </div>
                 </div>
-                <div id="resumeCard" class="alert alert-info d-none mt-3 mb-0"></div>
               </div>
 
               <div class="col-12 col-xl-8">
@@ -195,6 +202,11 @@ $concentrationOptions = $registrationOptions['concentration_options'];
                         </div>
                       </div>
                       <div class="col-12 col-lg-5">
+                        <div class="mb-3">
+                          <button id="switchSoloBtn" class="btn btn-outline-warning w-100" type="button">
+                            <i class="ti ti-user-x me-1"></i>Switch to Solo
+                          </button>
+                        </div>
                         <h3 class="h5 mb-2">Incoming invites</h3>
                         <div id="incomingInvites" class="vstack gap-2 mb-3"></div>
                         <div id="teammateCard" class="alert alert-success d-none mb-0"></div>

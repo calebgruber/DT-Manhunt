@@ -4,6 +4,8 @@ const state = {
   user: window.__BOOT_USER__ || null,
   matchmaking: null,
   pollTimer: null,
+  pollBusy: false,
+  activeRequests: 0,
 };
 
 const ui = {
@@ -15,7 +17,6 @@ const ui = {
   loginForm: document.getElementById('loginForm'),
   registerForm: document.getElementById('registerForm'),
   stepper: document.getElementById('stepper'),
-  resumeCard: document.getElementById('resumeCard'),
   profileStep: document.getElementById('profileStep'),
   modeStep: document.getElementById('modeStep'),
   matchmakingStep: document.getElementById('matchmakingStep'),
@@ -31,8 +32,30 @@ const ui = {
   teammateCard: document.getElementById('teammateCard'),
   paymentInfo: document.getElementById('paymentInfo'),
   completePaymentBtn: document.getElementById('completePaymentBtn'),
+  switchSoloBtn: document.getElementById('switchSoloBtn'),
   toastContainer: document.getElementById('toastContainer'),
+  loadingOverlay: document.getElementById('loadingOverlay'),
+  loadingText: document.getElementById('loadingText'),
 };
+
+function setLoading(show, text = 'Loading...') {
+  if (text) {
+    ui.loadingText.textContent = text;
+  }
+  ui.loadingOverlay.classList.toggle('is-visible', show);
+}
+
+function beginLoading(text) {
+  state.activeRequests += 1;
+  setLoading(true, text);
+}
+
+function endLoading() {
+  state.activeRequests = Math.max(0, state.activeRequests - 1);
+  if (state.activeRequests === 0) {
+    setLoading(false);
+  }
+}
 
 function toast(message, type = 'primary') {
   const wrapper = document.createElement('div');
@@ -62,17 +85,27 @@ function toast(message, type = 'primary') {
   setTimeout(() => wrapper.remove(), 3000);
 }
 
-async function api(action, payload = {}) {
-  const res = await fetch('/api.php', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action, ...payload }),
-  });
-  const data = await res.json();
-  if (!data.ok) {
-    throw new Error(data.message || 'Request failed');
+async function api(action, payload = {}, options = {}) {
+  const { loading = true, loadingText = 'Loading...' } = options;
+  if (loading) {
+    beginLoading(loadingText);
   }
-  return data;
+  try {
+    const res = await fetch('/api.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, ...payload }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      throw new Error(data.message || 'Request failed');
+    }
+    return data;
+  } finally {
+    if (loading) {
+      endLoading();
+    }
+  }
 }
 
 function setAuthTab(tab) {
@@ -103,15 +136,16 @@ function renderStepper(step) {
 
 function showStep(step) {
   [ui.profileStep, ui.modeStep, ui.matchmakingStep, ui.paymentStep, ui.completeStep].forEach((el) => el.classList.add('d-none'));
-  stopPolling();
+  [ui.profileStep, ui.modeStep, ui.matchmakingStep, ui.paymentStep, ui.completeStep].forEach((el) => el.classList.remove('step-animate'));
 
-  if (step === 'profile') ui.profileStep.classList.remove('d-none');
-  else if (step === 'mode') ui.modeStep.classList.remove('d-none');
-  else if (step === 'matchmaking') {
-    ui.matchmakingStep.classList.remove('d-none');
-    startPolling();
-  } else if (step === 'payment') ui.paymentStep.classList.remove('d-none');
-  else ui.completeStep.classList.remove('d-none');
+  let activeStep = ui.completeStep;
+  if (step === 'profile') activeStep = ui.profileStep;
+  else if (step === 'mode') activeStep = ui.modeStep;
+  else if (step === 'matchmaking') activeStep = ui.matchmakingStep;
+  else if (step === 'payment') activeStep = ui.paymentStep;
+
+  activeStep.classList.remove('d-none');
+  requestAnimationFrame(() => activeStep.classList.add('step-animate'));
 }
 
 function renderUser() {
@@ -129,9 +163,6 @@ function renderUser() {
   renderStepper(step);
   showStep(step);
 
-  ui.resumeCard.classList.remove('d-none');
-  ui.resumeCard.textContent = `Resumed at step: ${step}`;
-
   ui.profileSummary.textContent = `${state.user.full_name} • ${state.user.graduation_year} • ${state.user.concentration}`;
 
   ui.paymentInfo.textContent = '';
@@ -141,11 +172,13 @@ function renderUser() {
   const mateLine = document.createElement('div');
   mateLine.textContent = state.matchmaking?.teammate ? `Teammate: ${state.matchmaking.teammate.full_name}` : 'Teammate: none';
   ui.paymentInfo.append(modeLine, mateLine);
+
+  startPolling();
 }
 
-async function refreshState() {
+async function refreshState(quiet = false) {
   if (!state.user) return;
-  const data = await api('state');
+  const data = await api('state', {}, { loading: !quiet, loadingText: 'Syncing account...' });
   state.user = data.user;
   state.matchmaking = { teammate: data.teammate };
   renderUser();
@@ -261,7 +294,7 @@ async function replyInvite(inviteId, decision) {
 async function loadMatchmakingState() {
   if (!state.user || state.user.registration_step !== 'matchmaking') return;
   try {
-    const data = await api('matchmaking_state');
+    const data = await api('matchmaking_state', {}, { loading: false });
     state.user = data.user;
     state.matchmaking = {
       incoming: data.incoming,
@@ -285,14 +318,35 @@ async function loadMatchmakingState() {
       renderUser();
     }
   } catch (error) {
-    toast(error.message, 'danger');
+    if (!state.pollBusy) {
+      toast(error.message, 'danger');
+    }
+  }
+}
+
+async function pollTick() {
+  if (!state.user || state.pollBusy) return;
+  state.pollBusy = true;
+  try {
+    if (state.user.registration_step === 'matchmaking') {
+      await loadMatchmakingState();
+      return;
+    }
+    const data = await api('state', {}, { loading: false });
+    state.user = data.user;
+    state.matchmaking = { teammate: data.teammate };
+    renderUser();
+  } catch (error) {
+    // keep quiet during background polling
+  } finally {
+    state.pollBusy = false;
   }
 }
 
 function startPolling() {
   if (state.pollTimer) return;
-  loadMatchmakingState();
-  state.pollTimer = setInterval(loadMatchmakingState, 3000);
+  pollTick();
+  state.pollTimer = setInterval(pollTick, 1200);
 }
 
 function stopPolling() {
@@ -333,16 +387,20 @@ function wireEvents() {
   });
 
   ui.logoutBtn.addEventListener('click', async () => {
-    await api('logout');
-    state.user = null;
-    state.matchmaking = null;
-    renderUser();
-    toast('Logged out', 'secondary');
+    try {
+      await api('logout', {}, { loadingText: 'Logging out...' });
+      state.user = null;
+      state.matchmaking = null;
+      renderUser();
+      toast('Logged out', 'secondary');
+    } catch (error) {
+      toast(error.message, 'danger');
+    }
   });
 
   ui.continueToMode.addEventListener('click', async () => {
     try {
-      const data = await api('set_step', { step: 'mode' });
+      const data = await api('set_step', { step: 'mode' }, { loadingText: 'Loading next step...' });
       state.user = data.user;
       await refreshState();
     } catch (error) {
@@ -353,7 +411,7 @@ function wireEvents() {
   document.querySelectorAll('.mode-btn').forEach((btn) => {
     btn.addEventListener('click', async () => {
       try {
-        const data = await api('set_mode', { mode: btn.dataset.mode });
+        const data = await api('set_mode', { mode: btn.dataset.mode }, { loadingText: 'Updating mode...' });
         state.user = data.user;
         state.matchmaking = null;
         await refreshState();
@@ -365,7 +423,7 @@ function wireEvents() {
 
   ui.searchBtn.addEventListener('click', async () => {
     try {
-      const data = await api('search_users', { query: ui.searchInput.value.trim() });
+      const data = await api('search_users', { query: ui.searchInput.value.trim() }, { loading: false });
       renderSearchResults(data.results || []);
     } catch (error) {
       toast(error.message, 'danger');
@@ -381,7 +439,7 @@ function wireEvents() {
 
   ui.completePaymentBtn.addEventListener('click', async () => {
     try {
-      const data = await api('complete_payment');
+      const data = await api('complete_payment', {}, { loadingText: 'Finalizing payment...' });
       state.user = data.user;
       await refreshState();
       toast('Payment saved', 'success');
@@ -389,16 +447,30 @@ function wireEvents() {
       toast(error.message, 'danger');
     }
   });
+
+  ui.switchSoloBtn.addEventListener('click', async () => {
+    try {
+      const data = await api('switch_to_solo', {}, { loadingText: 'Switching to solo...' });
+      state.user = data.user;
+      state.matchmaking = null;
+      await refreshState();
+      toast('Switched to solo. Continue to payment.', 'info');
+    } catch (error) {
+      toast(error.message, 'danger');
+    }
+  });
 }
 
 async function init() {
+  setLoading(true, 'Preparing app...');
   wireEvents();
   setAuthTab('login');
   if (state.user) {
-    await refreshState();
+    await refreshState(true);
   } else {
     renderUser();
   }
+  setLoading(false);
 }
 
 init();

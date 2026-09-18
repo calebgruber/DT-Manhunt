@@ -160,6 +160,50 @@ try {
         respond(true, ['user' => userPublic(currentUser())]);
     }
 
+    if ($action === 'switch_to_solo') {
+        $user = requireUser();
+        if (($user['mode'] ?? null) !== 'duo' || (string) $user['registration_step'] !== 'matchmaking') {
+            respond(false, ['message' => 'You can only switch to solo during duo matchmaking.'], 422);
+        }
+
+        $pdo->beginTransaction();
+        try {
+            $updatedAt = nowUtc();
+
+            $updateUser = $pdo->prepare(
+                "UPDATE users
+                 SET mode = 'solo',
+                     teammate_user_id = NULL,
+                     registration_step = 'payment',
+                     updated_at = :updated_at
+                 WHERE id = :id"
+            );
+            $updateUser->execute([
+                'updated_at' => $updatedAt,
+                'id' => (int) $user['id'],
+            ]);
+
+            $cancelInvites = $pdo->prepare(
+                "UPDATE invites
+                 SET status = 'cancelled', updated_at = :updated_at
+                 WHERE status = 'pending'
+                   AND (inviter_user_id = :id OR invitee_user_id = :id)"
+            );
+            $cancelInvites->execute([
+                'updated_at' => $updatedAt,
+                'id' => (int) $user['id'],
+            ]);
+
+            $pdo->commit();
+            respond(true, ['user' => userPublic(currentUser())]);
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+    }
+
     if ($action === 'search_users') {
         $user = requireUser();
         if (($user['mode'] ?? null) !== 'duo' || (string) $user['registration_step'] !== 'matchmaking') {

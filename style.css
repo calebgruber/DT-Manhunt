@@ -2,8 +2,40 @@ body {
   min-height: 100vh;
 }
 
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--tblr-bg-surface) 70%, transparent);
+  backdrop-filter: blur(3px);
+  z-index: 2000;
+}
+
+.loading-overlay.is-visible {
+  display: flex;
+  animation: fadeIn 0.18s ease;
+}
+
+.loading-card {
+  min-width: 220px;
+}
+
 .app-container {
   max-width: 1180px;
+}
+
+.card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn {
+  transition: transform 0.15s ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
 }
 
 .stepper {
@@ -52,6 +84,10 @@ body {
   margin-bottom: 1rem;
 }
 
+.step-pane.step-animate {
+  animation: stepIn 0.24s ease;
+}
+
 .mode-btn {
   min-height: 150px;
   display: flex;
@@ -66,6 +102,7 @@ body {
   border-radius: var(--tblr-border-radius);
   background: var(--tblr-bg-surface);
   padding: 0.75rem;
+  animation: fadeIn 0.2s ease;
 }
 
 @media (max-width: 767.98px) {
@@ -98,5 +135,25 @@ body {
 
   .step {
     min-width: 0;
+  }
+}
+
+@keyframes stepIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
