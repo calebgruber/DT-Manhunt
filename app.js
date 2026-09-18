@@ -14,6 +14,7 @@ const ui = {
   authSection: document.getElementById('authSection'),
   appSection: document.getElementById('appSection'),
   adminLink: document.getElementById('adminLink'),
+  loggedInUserLabel: document.getElementById('loggedInUserLabel'),
   logoutBtn: document.getElementById('logoutBtn'),
   loginPanel: document.getElementById('loginPanel'),
   registerPanel: document.getElementById('registerPanel'),
@@ -162,12 +163,16 @@ function renderUser() {
   ui.appSection.classList.toggle('d-none', !loggedIn);
   ui.logoutBtn.classList.toggle('d-none', !loggedIn);
   ui.adminLink.classList.toggle('d-none', !loggedIn || !state.user?.is_admin);
+  ui.loggedInUserLabel.classList.toggle('d-none', !loggedIn);
 
   if (!loggedIn) {
+    ui.loggedInUserLabel.textContent = '';
     stopPolling();
     state.currentStep = null;
     return;
   }
+
+  ui.loggedInUserLabel.textContent = `Logged in: ${state.user.full_name}`;
 
   const step = state.user.registration_step || 'profile';
   renderStepper(step);

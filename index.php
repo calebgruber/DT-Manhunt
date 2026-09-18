@@ -42,7 +42,8 @@ $concentrationOptions = $registrationOptions['concentration_options'];
             <div class="fw-semibold">Manhunt Registration</div>
           </div>
         </div>
-        <div class="navbar-nav flex-row order-md-last">
+        <div class="navbar-nav flex-row align-items-center order-md-last">
+          <span id="loggedInUserLabel" class="badge bg-secondary-lt text-secondary d-none me-2"></span>
           <a id="adminLink" href="/admin/" class="btn btn-outline-secondary d-none me-2">
             <i class="ti ti-settings me-1"></i>Admin
           </a>
