@@ -18,4 +18,15 @@ return [
     'security' => [
         'session_name' => 'dt_manhunt_session',
     ],
+    'registration' => [
+        // Update these in admin/local config as needed.
+        'graduation_year_options' => ['2026', '2027', '2028', '2029', '2030'],
+        'concentration_options' => [
+            'Stage Management',
+            'Lighting Design',
+            'Sound Design',
+            'Scenic',
+            'TD / PM',
+        ],
+    ],
 ];

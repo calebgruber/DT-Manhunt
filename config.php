@@ -24,4 +24,15 @@ return [
     'security' => [
         'session_name' => 'dt_manhunt_session',
     ],
+    'registration' => [
+        // Admin-editable dropdown values.
+        'graduation_year_options' => ['2026', '2027', '2028', '2029', '2030'],
+        'concentration_options' => [
+            'Stage Management',
+            'Lighting Design',
+            'Sound Design',
+            'Scenic',
+            'TD / PM',
+        ],
+    ],
 ];

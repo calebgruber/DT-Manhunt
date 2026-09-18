@@ -8,6 +8,9 @@ $user = currentUser();
 $config = appConfig();
 $appName = (string) ($config['app']['name'] ?? 'DT Manhunt');
 $orgName = (string) ($config['app']['organization'] ?? 'SUNY Purchase');
+$registrationOptions = registrationOptions();
+$graduationYearOptions = $registrationOptions['graduation_year_options'];
+$concentrationOptions = $registrationOptions['concentration_options'];
 ?>
 <!doctype html>
 <html lang="en" data-bs-theme="dark">
@@ -74,7 +77,7 @@ $orgName = (string) ($config['app']['organization'] ?? 'SUNY Purchase');
                       <form id="loginForm" class="vstack gap-3">
                         <div>
                           <label class="form-label" for="loginPhone">Phone number</label>
-                          <input id="loginPhone" class="form-control form-control-lg" name="phone" placeholder="Phone number" type="tel" autocomplete="tel" required>
+                          <input id="loginPhone" class="form-control form-control-lg" name="phone" placeholder="Phone number" type="tel" inputmode="numeric" pattern="[0-9]{10,15}" minlength="10" maxlength="15" autocomplete="tel-national" required>
                         </div>
                         <div>
                           <label class="form-label" for="loginPin">PIN</label>
@@ -99,19 +102,29 @@ $orgName = (string) ($config['app']['organization'] ?? 'SUNY Purchase');
                           </div>
                           <div class="col-12">
                             <label class="form-label" for="registerPhone">Phone number</label>
-                            <input id="registerPhone" class="form-control form-control-lg" name="phone" placeholder="Phone number" type="tel" autocomplete="tel" required>
+                            <input id="registerPhone" class="form-control form-control-lg" name="phone" placeholder="Phone number" type="tel" inputmode="numeric" pattern="[0-9]{10,15}" minlength="10" maxlength="15" autocomplete="tel-national" required>
                           </div>
                           <div class="col-12 col-sm-6">
                             <label class="form-label" for="registerPin">PIN (4-8 digits)</label>
-                            <input id="registerPin" class="form-control form-control-lg" name="pin" placeholder="PIN" inputmode="numeric" pattern="[0-9]{4,8}" autocomplete="new-password" type="password" required>
+                            <input id="registerPin" class="form-control form-control-lg" name="pin" placeholder="PIN" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" autocomplete="new-password" type="password" required>
                           </div>
                           <div class="col-12 col-sm-6">
                             <label class="form-label" for="registerGradYear">Graduation year</label>
-                            <input id="registerGradYear" class="form-control form-control-lg" name="graduation_year" placeholder="2027" inputmode="numeric" pattern="[0-9]{4}" autocomplete="off" required>
+                            <select id="registerGradYear" class="form-select form-select-lg" name="graduation_year" required>
+                              <option value="">Select year</option>
+                              <?php foreach ($graduationYearOptions as $year): ?>
+                                <option value="<?php echo htmlspecialchars($year, ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($year, ENT_QUOTES, 'UTF-8'); ?></option>
+                              <?php endforeach; ?>
+                            </select>
                           </div>
                           <div class="col-12">
                             <label class="form-label" for="registerConcentration">Concentration</label>
-                            <input id="registerConcentration" class="form-control form-control-lg" name="concentration" placeholder="Concentration" autocomplete="organization-title" required>
+                            <select id="registerConcentration" class="form-select form-select-lg" name="concentration" required>
+                              <option value="">Select concentration</option>
+                              <?php foreach ($concentrationOptions as $option): ?>
+                                <option value="<?php echo htmlspecialchars($option, ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($option, ENT_QUOTES, 'UTF-8'); ?></option>
+                              <?php endforeach; ?>
+                            </select>
                           </div>
                         </div>
                         <button class="btn btn-success btn-lg w-100" type="submit">Create Account</button>

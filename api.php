@@ -26,6 +26,9 @@ function respond(bool $ok, array $payload = [], int $status = 200): void
 $input = body();
 $action = (string) ($input['action'] ?? $_GET['action'] ?? '');
 $pdo = db();
+$registrationOptions = registrationOptions();
+$allowedYears = $registrationOptions['graduation_year_options'];
+$allowedConcentrations = $registrationOptions['concentration_options'];
 
 try {
     if ($action === 'register') {
@@ -39,11 +42,20 @@ try {
         if ($firstName === '' || $lastName === '' || $phone === '' || $pin === '' || $graduationYear === '' || $concentration === '') {
             respond(false, ['message' => 'All fields are required.'], 422);
         }
+        if (!isValidPhone($phone)) {
+            respond(false, ['message' => 'Phone number must be 10 to 15 digits.'], 422);
+        }
         if (!preg_match('/^\d{4}$/', $graduationYear)) {
             respond(false, ['message' => 'Graduation year must be 4 digits.'], 422);
         }
+        if ($allowedYears !== [] && !in_array($graduationYear, $allowedYears, true)) {
+            respond(false, ['message' => 'Select a valid graduation year.'], 422);
+        }
         if (!preg_match('/^\d{4,8}$/', $pin)) {
             respond(false, ['message' => 'PIN must be 4-8 digits.'], 422);
+        }
+        if ($allowedConcentrations !== [] && !in_array($concentration, $allowedConcentrations, true)) {
+            respond(false, ['message' => 'Select a valid concentration.'], 422);
         }
 
         $existing = $pdo->prepare("SELECT id FROM users WHERE phone = :phone LIMIT 1");
@@ -81,6 +93,9 @@ try {
 
         if ($phone === '' || $pin === '') {
             respond(false, ['message' => 'Phone and PIN are required.'], 422);
+        }
+        if (!isValidPhone($phone)) {
+            respond(false, ['message' => 'Phone number must be 10 to 15 digits.'], 422);
         }
 
         $stmt = $pdo->prepare("SELECT * FROM users WHERE phone = :phone LIMIT 1");

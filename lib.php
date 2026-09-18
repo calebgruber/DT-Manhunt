@@ -136,6 +136,38 @@ function normalizePhone(string $phone): string
     return preg_replace('/\D+/', '', $phone) ?? '';
 }
 
+function isValidPhone(string $phoneDigits): bool
+{
+    return (bool) preg_match('/^\d{10,15}$/', $phoneDigits);
+}
+
+function registrationOptions(): array
+{
+    $config = appConfig();
+    $registration = is_array($config['registration'] ?? null) ? $config['registration'] : [];
+
+    $yearOptions = [];
+    foreach (($registration['graduation_year_options'] ?? []) as $year) {
+        $value = trim((string) $year);
+        if (preg_match('/^\d{4}$/', $value)) {
+            $yearOptions[$value] = $value;
+        }
+    }
+
+    $concentrationOptions = [];
+    foreach (($registration['concentration_options'] ?? []) as $option) {
+        $value = trim((string) $option);
+        if ($value !== '') {
+            $concentrationOptions[$value] = $value;
+        }
+    }
+
+    return [
+        'graduation_year_options' => array_values($yearOptions),
+        'concentration_options' => array_values($concentrationOptions),
+    ];
+}
+
 function currentUser(): ?array
 {
     $id = isset($_SESSION['user_id']) ? (int) $_SESSION['user_id'] : 0;
