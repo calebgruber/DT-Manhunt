@@ -2,6 +2,58 @@
 
 declare(strict_types=1);
 
+function mergeConfig(array $base, array $override): array
+{
+    foreach ($override as $key => $value) {
+        if (is_array($value) && isset($base[$key]) && is_array($base[$key])) {
+            $base[$key] = mergeConfig($base[$key], $value);
+            continue;
+        }
+        $base[$key] = $value;
+    }
+
+    return $base;
+}
+
+function appConfig(): array
+{
+    static $config = null;
+    if (is_array($config)) {
+        return $config;
+    }
+
+    $basePath = __DIR__ . '/config.php';
+    if (!is_file($basePath)) {
+        throw new RuntimeException('Missing config.php');
+    }
+
+    $loaded = require $basePath;
+    if (!is_array($loaded)) {
+        throw new RuntimeException('config.php must return an array');
+    }
+
+    $localPath = __DIR__ . '/config.local.php';
+    if (is_file($localPath)) {
+        $local = require $localPath;
+        if (is_array($local)) {
+            $loaded = mergeConfig($loaded, $local);
+        }
+    }
+
+    $config = $loaded;
+    return $config;
+}
+
+$config = appConfig();
+$timezone = (string) ($config['app']['timezone'] ?? 'UTC');
+if ($timezone !== '') {
+    date_default_timezone_set($timezone);
+}
+
+$sessionName = trim((string) ($config['security']['session_name'] ?? 'dt_manhunt_session'));
+if ($sessionName !== '') {
+    session_name($sessionName);
+}
 session_start();
 
 function db(): PDO
@@ -11,9 +63,12 @@ function db(): PDO
         return $pdo;
     }
 
-    $dsn = getenv('DB_DSN') ?: '';
-    $dbUser = getenv('DB_USER') ?: '';
-    $dbPass = getenv('DB_PASS') ?: '';
+    $config = appConfig();
+    $dbConfig = is_array($config['database'] ?? null) ? $config['database'] : [];
+
+    $dsn = trim((string) ($dbConfig['dsn'] ?? ''));
+    $dbUser = (string) ($dbConfig['user'] ?? '');
+    $dbPass = (string) ($dbConfig['pass'] ?? '');
 
     if ($dsn === '') {
         $dsn = 'sqlite:' . __DIR__ . '/manhunt.sqlite';

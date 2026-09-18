@@ -1,0 +1,21 @@
+<?php
+
+declare(strict_types=1);
+
+return [
+    'database' => [
+        // Example MySQL DSN:
+        // mysql:host=localhost;port=3306;dbname=your_database;charset=utf8mb4
+        'dsn' => 'mysql:host=localhost;port=3306;dbname=your_database;charset=utf8mb4',
+        'user' => 'your_database_user',
+        'pass' => 'your_database_password',
+    ],
+    'realtime' => [
+        'ws_url' => 'wss://yourdomain.com/ws',
+        'bridge_url' => 'http://127.0.0.1:3000/event',
+        'bridge_secret' => 'set-a-long-random-secret',
+    ],
+    'security' => [
+        'session_name' => 'dt_manhunt_session',
+    ],
+];

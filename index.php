@@ -5,13 +5,16 @@ declare(strict_types=1);
 require __DIR__ . '/lib.php';
 
 $user = currentUser();
+$config = appConfig();
+$appName = (string) ($config['app']['name'] ?? 'DT Manhunt');
+$orgName = (string) ($config['app']['organization'] ?? 'SUNY Purchase');
 ?>
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>DT Manhunt</title>
+  <title><?php echo htmlspecialchars($appName, ENT_QUOTES, 'UTF-8'); ?></title>
   <!-- Tabler UI CDN -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/css/tabler.min.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.38.0/dist/tabler-icons.min.css" />
@@ -21,7 +24,7 @@ $user = currentUser();
   <main class="container py-3 py-lg-4 app-container">
     <header class="d-flex justify-content-between align-items-center page-header mb-3 mb-lg-4">
       <div>
-        <span class="eyebrow">SUNY Purchase</span>
+        <span class="eyebrow"><?php echo htmlspecialchars($orgName, ENT_QUOTES, 'UTF-8'); ?></span>
         <h1 class="h4 m-0">Manhunt Registration</h1>
       </div>
       <button id="logoutBtn" class="btn btn-outline-light btn-sm d-none" type="button">Logout</button>

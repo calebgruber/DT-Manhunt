@@ -43,4 +43,15 @@ Campus-wide Manhunt platform blueprint for SUNY Purchase using:
 
 This design keeps PHP simple and cPanel-friendly while providing low-latency mobile real-time behavior.
 
-> Runtime default: SQLite (`manhunt.sqlite`). To use MySQL, set `DB_DSN`, `DB_USER`, and `DB_PASS`, then run `starter.sql`.
+> Runtime default: SQLite (`manhunt.sqlite`). For production, switch to MySQL and run `starter.sql`.
+
+## App Configuration
+
+- Base config file: `config.php`
+- Local override file (not committed): `config.local.php`
+- Example template: `config.local.php.example`
+
+Typical setup:
+1. Copy `config.local.php.example` to `config.local.php`
+2. Add your DB DSN/user/password and app secrets
+3. Keep `config.local.php` private (already gitignored)
