@@ -9,15 +9,15 @@ return [
         'timezone' => 'UTC',
         'environment' => 'production',
     ],
-    'database' => [
+   'database' => [
         // Fill these with your production DB details.
         // Current runtime supports SQLite (default) and MySQL.
-        'dsn' => getenv('DB_DSN') ?: 'sqlite:' . __DIR__ . '/manhunt.sqlite',
-        'user' => getenv('DB_USER') ?: '',
-        'pass' => getenv('DB_PASS') ?: '',
+        'dsn' => getenv('voxelnodes_manhunt') ?: 'sqlite:' . __DIR__ . '/manhunt.sqlite',
+        'user' => getenv('voxelnodes_manhunt') ?: '',
+        'pass' => getenv('@@-(GkElsB2,o+yF') ?: '',
     ],
     'realtime' => [
-        'ws_url' => 'wss://yourdomain.com/ws',
+        'ws_url' => 'wss://calebgruber.me/ws',
         'bridge_url' => 'http://127.0.0.1:3000/event',
         'bridge_secret' => getenv('BRIDGE_SECRET') ?: '',
     ],
