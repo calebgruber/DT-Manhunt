@@ -8,7 +8,7 @@ Campus-wide Manhunt platform blueprint for SUNY Purchase using:
 
 ## Goals
 
-- Players register as individuals or duos, pay fee, and log in with phone + PIN
+- Players register as single or duo, pay fee, and log in with phone + PIN
 - Duo registration includes live teammate invite/accept/decline matching before payment
 - Registration captures profile details (for example graduation year and concentration)
 - Player dashboard shows live stage, timer, announcements, kill board, and admin messages

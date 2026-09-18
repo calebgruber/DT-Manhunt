@@ -20,9 +20,19 @@ All events use one shape:
   "type": "stage_change",
   "ts": "2026-09-18T01:00:00Z",
   "scope": "all",
+  "team_id": null,
+  "user_id": null,
+  "user_ids": null,
   "data": {}
 }
 ```
+
+Routing metadata rules:
+- `scope=all`: no routing IDs required
+- `scope=team`: set top-level `team_id`
+- `scope=user`: set top-level `user_id`
+- `scope=users`: set top-level `user_ids`
+- `data` is business payload only; transport routing identifiers stay top-level
 
 ## 3) Event Types
 
@@ -91,11 +101,11 @@ Validation rules:
 {
   "type": "duo_invite_received",
   "scope": "user",
+  "user_id": 202,
   "data": {
     "invite_id": "inv_123",
     "from_user_id": 101,
     "from_display_name": "Alex",
-    "to_user_id": 202,
     "status": "pending"
   }
 }
@@ -107,6 +117,7 @@ Validation rules:
 {
   "type": "duo_invite_declined",
   "scope": "user",
+  "user_id": 101,
   "data": {
     "invite_id": "inv_123",
     "declined_by_user_id": 202,
@@ -121,9 +132,9 @@ Validation rules:
 {
   "type": "duo_match_confirmed",
   "scope": "users",
+  "user_ids": [101, 202],
   "data": {
     "invite_id": "inv_123",
-    "user_ids": [101, 202],
     "next_step": "payment"
   }
 }
@@ -135,8 +146,8 @@ Validation rules:
 {
   "type": "registration_step_changed",
   "scope": "user",
+  "user_id": 101,
   "data": {
-    "user_id": 101,
     "step": "matchmaking",
     "resume_path": "/game/register/matchmaking"
   }

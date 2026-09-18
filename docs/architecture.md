@@ -53,7 +53,7 @@ Registration is a persisted multi-step flow so users can leave and return withou
    - duo pairing is created
    - both users advance to payment step
 
-Registration state is stored by step (`account`, `mode_select`, `matchmaking`, `payment`, `complete`) and resumed on next login.
+Registration state is stored by step (`profile`, `mode`, `matchmaking`, `payment`, `complete`) and resumed on next login.
 
 ## 4) Security and Access Separation
 
