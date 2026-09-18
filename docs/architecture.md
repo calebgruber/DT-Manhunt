@@ -2,7 +2,7 @@
 
 ## 1) Core Stack
 
-### cPanel Web App (PHP + MySQL + Bootstrap 5)
+### cPanel Web App (PHP + SQLite scaffold / MySQL target + Bootstrap 5)
 Responsibilities:
 - registration (individual/duo)
 - login (phone + PIN)
@@ -34,7 +34,8 @@ Node validates shared secret and broadcasts normalized events.
 
 ## 2) Data Ownership
 
-- **MySQL** is source-of-truth for game state, teams, locations, kill board, and messages.
+- **SQLite (`manhunt.sqlite`)** is the current scaffold source-of-truth for users, invites, and registration state in this repository.
+- **MySQL** remains the target production source-of-truth for game state, teams, locations, kill board, and messages.
 - **Node** is stateless for business data (uses memory only for active socket sessions).
 
 ## 3) Registration + Matchmaking Lifecycle

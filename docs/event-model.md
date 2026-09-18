@@ -225,7 +225,7 @@ Canonical step-to-route map:
 
 ## 8) Login/Logout + Resume Rules
 
-- every registration write persists current step and payload in MySQL
+- every registration write persists current step and payload in the configured app database (SQLite in this scaffold; MySQL in production)
 - login must query saved step and route user to that exact step
 - logout must only invalidate session tokens, not persisted registration state
 - if duo invite is pending during logout, restore invite state after next login

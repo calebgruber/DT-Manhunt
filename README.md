@@ -2,7 +2,7 @@
 
 Campus-wide Manhunt platform blueprint for SUNY Purchase using:
 
-- **PHP + MySQL + Bootstrap 5** (cPanel-hosted web app)
+- **PHP + SQLite (scaffold) + Bootstrap 5** (cPanel-hosted web app)
 - **Node.js + WebSockets** (real-time engine)
 - **Apache/Nginx reverse proxy** (`wss://yourdomain.com/ws`)
 
@@ -41,3 +41,5 @@ Campus-wide Manhunt platform blueprint for SUNY Purchase using:
 4. Node broadcasts updates over WebSocket to connected clients instantly
 
 This design keeps PHP simple and cPanel-friendly while providing low-latency mobile real-time behavior.
+
+> Note: current repository scaffold uses SQLite (`manhunt.sqlite`) for quick deployment. Production can swap persistence to MySQL per the architecture plan.

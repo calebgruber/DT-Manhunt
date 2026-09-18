@@ -116,9 +116,10 @@ try {
     if ($action === 'set_step') {
         $user = requireUser();
         $step = strtolower(trim((string) ($input['step'] ?? '')));
-        $allowed = ['profile', 'mode', 'matchmaking', 'payment', 'complete'];
-        if (!in_array($step, $allowed, true)) {
-            reply(false, ['message' => 'Invalid step.'], 422);
+        $currentStep = (string) ($user['registration_step'] ?? '');
+
+        if (!($currentStep === 'profile' && $step === 'mode')) {
+            reply(false, ['message' => 'Invalid step transition.'], 422);
         }
 
         $stmt = $pdo->prepare('UPDATE users SET registration_step = :step, updated_at = :updated_at WHERE id = :id');
@@ -137,6 +138,9 @@ try {
         $mode = strtolower(trim((string) ($input['mode'] ?? '')));
         if (!in_array($mode, ['solo', 'duo'], true)) {
             reply(false, ['message' => 'Mode must be solo or duo.'], 422);
+        }
+        if (($user['registration_step'] ?? '') !== 'mode') {
+            reply(false, ['message' => 'Mode can only be chosen from the mode step.'], 422);
         }
 
         $step = $mode === 'solo' ? 'payment' : 'matchmaking';
