@@ -61,7 +61,7 @@ $user = currentUser();
     </section>
 
     <section id="appSection" class="d-none">
-        <div class="card bg-black border-secondary mb-3">
+        <div id="stepperCard" class="card bg-black border-secondary mb-3">
             <div class="card-body">
                 <div class="stepper" id="stepper"></div>
             </div>

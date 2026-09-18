@@ -192,6 +192,9 @@ try {
         if (($user['mode'] ?? null) !== 'duo') {
             reply(false, ['message' => 'Set mode to duo first.'], 422);
         }
+        if (($user['registration_step'] ?? '') !== 'matchmaking') {
+            reply(false, ['message' => 'Invites can only be sent from the matchmaking step.'], 422);
+        }
 
         $inviteeId = (int) ($input['invitee_user_id'] ?? 0);
         if ($inviteeId <= 0 || $inviteeId === (int) $user['id']) {
@@ -280,6 +283,9 @@ try {
         if (!in_array($decision, ['accept', 'decline'], true)) {
             reply(false, ['message' => 'Decision must be accept or decline.'], 422);
         }
+        if (($user['registration_step'] ?? '') !== 'matchmaking') {
+            reply(false, ['message' => 'Invite responses are only allowed during matchmaking.'], 422);
+        }
 
         $stmt = $pdo->prepare('SELECT * FROM invites WHERE id = :id');
         $stmt->execute(['id' => $inviteId]);
@@ -360,12 +366,29 @@ try {
             reply(false, ['message' => 'Duo payment requires a matched teammate.'], 422);
         }
 
-        $stmt = $pdo->prepare('UPDATE users SET payment_status = "paid", registration_step = "complete", updated_at = :updated_at WHERE id = :id');
+        $stmt = $pdo->prepare('UPDATE users SET payment_status = "paid", updated_at = :updated_at WHERE id = :id');
         $stmt->execute(['updated_at' => nowIso(), 'id' => (int) $user['id']]);
 
         if (($user['mode'] ?? null) === 'duo' && $teammateId) {
-            $mateStmt = $pdo->prepare('UPDATE users SET registration_step = CASE WHEN payment_status = "paid" THEN "complete" ELSE "payment" END, updated_at = :updated_at WHERE id = :id');
-            $mateStmt->execute(['updated_at' => nowIso(), 'id' => $teammateId]);
+            $mateStmt = $pdo->prepare('SELECT payment_status FROM users WHERE id = :id');
+            $mateStmt->execute(['id' => $teammateId]);
+            $mate = $mateStmt->fetch();
+            $bothPaid = $mate && ($mate['payment_status'] ?? '') === 'paid';
+
+            if ($bothPaid) {
+                $finalize = $pdo->prepare('UPDATE users SET registration_step = "complete", updated_at = :updated_at WHERE id = :id OR id = :teammate_id');
+                $finalize->execute([
+                    'updated_at' => nowIso(),
+                    'id' => (int) $user['id'],
+                    'teammate_id' => $teammateId,
+                ]);
+            } else {
+                $hold = $pdo->prepare('UPDATE users SET registration_step = "payment", updated_at = :updated_at WHERE id = :id');
+                $hold->execute(['updated_at' => nowIso(), 'id' => (int) $user['id']]);
+            }
+        } else {
+            $soloFinalize = $pdo->prepare('UPDATE users SET registration_step = "complete", updated_at = :updated_at WHERE id = :id');
+            $soloFinalize->execute(['updated_at' => nowIso(), 'id' => (int) $user['id']]);
         }
 
         $user = currentUser();
