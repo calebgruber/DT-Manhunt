@@ -63,6 +63,12 @@ Registration dropdown config:
 Admin config:
 - `admin.allowed_phone_numbers` controls which user phone numbers can log in at `/admin/`
 - `admin.venmo_link` is the default payment link (admins can update it live in `/admin/`)
+- `test_admin` controls automatic seeded test admin credentials
+
+Default seeded test admin:
+- Phone: `0000000000`
+- PIN: `0000`
+- Name: `Admin Test`
 
 Payment flow:
 - Players submit payment from the payment step

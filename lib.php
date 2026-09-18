@@ -83,6 +83,7 @@ function db(): PDO
         $pdo->exec('PRAGMA foreign_keys = ON');
         bootstrapSqlite($pdo);
     }
+    ensureConfiguredTestAdmin($pdo);
 
     return $pdo;
 }
@@ -378,4 +379,76 @@ function venmoLink(): string
     $adminConfig = is_array($config['admin'] ?? null) ? $config['admin'] : [];
     $default = trim((string) ($adminConfig['venmo_link'] ?? ''));
     return trim(appSetting('venmo_link', $default));
+}
+
+function ensureConfiguredTestAdmin(PDO $pdo): void
+{
+    $config = appConfig();
+    $testConfig = is_array($config['test_admin'] ?? null) ? $config['test_admin'] : [];
+    if (!(bool) ($testConfig['enabled'] ?? false)) {
+        return;
+    }
+
+    $phone = normalizePhone((string) ($testConfig['phone'] ?? ''));
+    $pin = trim((string) ($testConfig['pin'] ?? ''));
+    $firstName = trim((string) ($testConfig['first_name'] ?? 'Admin'));
+    $lastName = trim((string) ($testConfig['last_name'] ?? 'Test'));
+    $graduationYear = trim((string) ($testConfig['graduation_year'] ?? '2027'));
+    $concentration = trim((string) ($testConfig['concentration'] ?? 'Stage Management'));
+
+    if (!isValidPhone($phone) || !preg_match('/^\d{4,8}$/', $pin)) {
+        return;
+    }
+    if ($firstName === '' || $lastName === '' || !preg_match('/^\d{4}$/', $graduationYear) || $concentration === '') {
+        return;
+    }
+
+    $fullName = trim($firstName . ' ' . $lastName);
+    $now = nowUtc();
+
+    $lookup = $pdo->prepare('SELECT id FROM users WHERE phone = :phone LIMIT 1');
+    $lookup->execute(['phone' => $phone]);
+    $existing = $lookup->fetch();
+
+    if ($existing) {
+        $update = $pdo->prepare(
+            "UPDATE users
+             SET first_name = :first_name,
+                 last_name = :last_name,
+                 full_name = :full_name,
+                 graduation_year = :graduation_year,
+                 concentration = :concentration,
+                 pin_hash = :pin_hash,
+                 is_admin = 1,
+                 updated_at = :updated_at
+             WHERE id = :id"
+        );
+        $update->execute([
+            'first_name' => $firstName,
+            'last_name' => $lastName,
+            'full_name' => $fullName,
+            'graduation_year' => $graduationYear,
+            'concentration' => $concentration,
+            'pin_hash' => password_hash($pin, PASSWORD_DEFAULT),
+            'updated_at' => $now,
+            'id' => (int) $existing['id'],
+        ]);
+        return;
+    }
+
+    $insert = $pdo->prepare(
+        "INSERT INTO users (phone, pin_hash, first_name, last_name, full_name, graduation_year, concentration, mode, registration_step, teammate_user_id, payment_status, is_admin, created_at, updated_at)
+         VALUES (:phone, :pin_hash, :first_name, :last_name, :full_name, :graduation_year, :concentration, NULL, 'profile', NULL, 'pending', 1, :created_at, :updated_at)"
+    );
+    $insert->execute([
+        'phone' => $phone,
+        'pin_hash' => password_hash($pin, PASSWORD_DEFAULT),
+        'first_name' => $firstName,
+        'last_name' => $lastName,
+        'full_name' => $fullName,
+        'graduation_year' => $graduationYear,
+        'concentration' => $concentration,
+        'created_at' => $now,
+        'updated_at' => $now,
+    ]);
 }

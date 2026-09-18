@@ -33,4 +33,13 @@ return [
         'allowed_phone_numbers' => ['9145551000'],
         'venmo_link' => 'https://venmo.com/u/youraccount',
     ],
+    'test_admin' => [
+        'enabled' => true,
+        'phone' => '0000000000',
+        'pin' => '0000',
+        'first_name' => 'Admin',
+        'last_name' => 'Test',
+        'graduation_year' => '2027',
+        'concentration' => 'Stage Management',
+    ],
 ];
