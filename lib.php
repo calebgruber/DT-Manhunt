@@ -91,7 +91,6 @@ function userPublic(array $user): array
 {
     return [
         'id' => (int) $user['id'],
-        'phone' => $user['phone'],
         'full_name' => $user['full_name'],
         'display_name' => $user['display_name'],
         'graduation_year' => $user['graduation_year'],
@@ -109,7 +108,7 @@ function teammate(?int $teammateUserId): ?array
         return null;
     }
 
-    $stmt = db()->prepare('SELECT id, display_name, full_name, phone FROM users WHERE id = :id');
+    $stmt = db()->prepare('SELECT id, display_name, full_name FROM users WHERE id = :id');
     $stmt->execute(['id' => $teammateUserId]);
     $mate = $stmt->fetch();
 
@@ -121,6 +120,5 @@ function teammate(?int $teammateUserId): ?array
         'id' => (int) $mate['id'],
         'display_name' => $mate['display_name'],
         'full_name' => $mate['full_name'],
-        'phone' => $mate['phone'],
     ];
 }

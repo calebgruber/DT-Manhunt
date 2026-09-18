@@ -210,6 +210,12 @@ try {
             reply(false, ['message' => 'You already have a pending invite.'], 409);
         }
 
+        $targetPendingCheck = $pdo->prepare('SELECT id FROM invites WHERE status = "pending" AND invitee_user_id = :invitee LIMIT 1');
+        $targetPendingCheck->execute(['invitee' => $inviteeId]);
+        if ($targetPendingCheck->fetch()) {
+            reply(false, ['message' => 'That user already has a pending invite.'], 409);
+        }
+
         $now = nowIso();
         $stmt = $pdo->prepare('INSERT INTO invites (inviter_user_id, invitee_user_id, status, created_at, updated_at) VALUES (:inviter, :invitee, "pending", :created_at, :updated_at)');
         $stmt->execute(['inviter' => (int) $user['id'], 'invitee' => $inviteeId, 'created_at' => $now, 'updated_at' => $now]);
@@ -289,7 +295,7 @@ try {
                 $update = $pdo->prepare('UPDATE invites SET status = "declined", updated_at = :updated_at WHERE id = :id');
                 $update->execute(['updated_at' => nowIso(), 'id' => $inviteId]);
 
-                $pdo->prepare('UPDATE users SET registration_step = "matchmaking", updated_at = :updated_at WHERE id IN (:inviter, :invitee)')
+                $pdo->prepare('UPDATE users SET registration_step = "matchmaking", updated_at = :updated_at WHERE id = :inviter OR id = :invitee')
                     ->execute([
                         'updated_at' => nowIso(),
                         'inviter' => (int) $invite['inviter_user_id'],
@@ -306,7 +312,17 @@ try {
                 $pairStmt->execute(['mate_id' => $inviteeId, 'updated_at' => nowIso(), 'id' => $inviterId]);
                 $pairStmt->execute(['mate_id' => $inviterId, 'updated_at' => nowIso(), 'id' => $inviteeId]);
 
-                $cancelStmt = $pdo->prepare('UPDATE invites SET status = "cancelled", updated_at = :updated_at WHERE status = "pending" AND (inviter_user_id IN (:inviter, :invitee) OR invitee_user_id IN (:inviter, :invitee))');
+                $cancelStmt = $pdo->prepare(
+                    'UPDATE invites
+                     SET status = "cancelled", updated_at = :updated_at
+                     WHERE status = "pending"
+                       AND (
+                           inviter_user_id = :inviter
+                           OR inviter_user_id = :invitee
+                           OR invitee_user_id = :inviter
+                           OR invitee_user_id = :invitee
+                       )'
+                );
                 $cancelStmt->execute(['updated_at' => nowIso(), 'inviter' => $inviterId, 'invitee' => $inviteeId]);
             }
 
@@ -324,6 +340,13 @@ try {
     if ($action === 'complete_payment') {
         $user = requireUser();
         $teammateId = $user['teammate_user_id'] ? (int) $user['teammate_user_id'] : null;
+
+        if (($user['registration_step'] ?? '') !== 'payment') {
+            reply(false, ['message' => 'Payment can only be completed from the payment step.'], 422);
+        }
+        if (($user['mode'] ?? null) === 'duo' && !$teammateId) {
+            reply(false, ['message' => 'Duo payment requires a matched teammate.'], 422);
+        }
 
         $stmt = $pdo->prepare('UPDATE users SET payment_status = "paid", registration_step = "complete", updated_at = :updated_at WHERE id = :id');
         $stmt->execute(['updated_at' => nowIso(), 'id' => (int) $user['id']]);

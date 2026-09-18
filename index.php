@@ -137,7 +137,10 @@ $user = currentUser();
 </div>
 
 <script>
-window.__BOOT_USER__ = <?php echo json_encode($user ? userPublic($user) : null, JSON_UNESCAPED_SLASHES); ?>;
+window.__BOOT_USER__ = <?php echo json_encode(
+    $user ? userPublic($user) : null,
+    JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+); ?>;
 </script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="/app.js"></script>

@@ -39,7 +39,18 @@ function showToast(message, tone = 'primary') {
   const wrapper = document.createElement('div');
   wrapper.className = `toast align-items-center text-bg-${tone} border-0`;
   wrapper.role = 'alert';
-  wrapper.innerHTML = `<div class="d-flex"><div class="toast-body">${message}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>`;
+  const layout = document.createElement('div');
+  layout.className = 'd-flex';
+  const body = document.createElement('div');
+  body.className = 'toast-body';
+  body.textContent = String(message ?? '');
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'btn-close btn-close-white me-2 m-auto';
+  close.setAttribute('data-bs-dismiss', 'toast');
+  layout.appendChild(body);
+  layout.appendChild(close);
+  wrapper.appendChild(layout);
   el.toastContainer.appendChild(wrapper);
   const toast = new bootstrap.Toast(wrapper, { delay: 2500 });
   toast.show();
@@ -132,7 +143,14 @@ function renderUser() {
     ? `Teammate matched: ${state.matchmaking.teammate.display_name}`
     : 'No teammate matched yet';
 
-  el.paymentInfo.innerHTML = `<div class="small text-secondary">Mode: <strong>${state.user.mode || 'Not set'}</strong></div><div>${teammateText}</div>`;
+  el.paymentInfo.textContent = '';
+  const modeLine = document.createElement('div');
+  modeLine.className = 'small text-secondary';
+  modeLine.textContent = `Mode: ${state.user.mode || 'Not set'}`;
+  const teammateLine = document.createElement('div');
+  teammateLine.textContent = teammateText;
+  el.paymentInfo.appendChild(modeLine);
+  el.paymentInfo.appendChild(teammateLine);
 
   if (state.user.teammate_user_id && state.matchmaking?.teammate) {
     el.teammateCard.classList.remove('d-none');
@@ -205,8 +223,27 @@ function renderSearchResults(results) {
   results.forEach((user) => {
     const row = document.createElement('div');
     row.className = 'list-group-item list-group-item-action bg-dark text-light border-secondary';
-    row.innerHTML = `<div class="d-flex justify-content-between align-items-center gap-2"><div><div class="fw-semibold">${user.display_name}</div><small class="text-secondary">${user.graduation_year} • ${user.concentration}</small></div><button class="btn btn-sm btn-warning">Invite</button></div>`;
-    row.querySelector('button').addEventListener('click', async () => {
+
+    const layout = document.createElement('div');
+    layout.className = 'd-flex justify-content-between align-items-center gap-2';
+    const info = document.createElement('div');
+    const name = document.createElement('div');
+    name.className = 'fw-semibold';
+    name.textContent = user.display_name;
+    const meta = document.createElement('small');
+    meta.className = 'text-secondary';
+    meta.textContent = `${user.graduation_year} • ${user.concentration}`;
+    const button = document.createElement('button');
+    button.className = 'btn btn-sm btn-warning';
+    button.textContent = 'Invite';
+
+    info.appendChild(name);
+    info.appendChild(meta);
+    layout.appendChild(info);
+    layout.appendChild(button);
+    row.appendChild(layout);
+
+    button.addEventListener('click', async () => {
       try {
         await api('send_invite', { invitee_user_id: user.id });
         showToast(`Invite sent to ${user.display_name}`, 'success');
@@ -238,19 +275,39 @@ function renderIncomingInvites(incoming = []) {
   incoming.forEach((invite) => {
     const card = document.createElement('div');
     card.className = 'p-2 border border-secondary rounded';
-    card.innerHTML = `<div class="fw-semibold mb-2">${invite.inviter_display_name} invited you</div><div class="d-flex gap-2"><button class="btn btn-success btn-sm" data-decision="accept">Accept</button><button class="btn btn-outline-danger btn-sm" data-decision="decline">Decline</button></div>`;
+    const title = document.createElement('div');
+    title.className = 'fw-semibold mb-2';
+    title.textContent = `${invite.inviter_display_name} invited you`;
 
-    card.querySelectorAll('button').forEach((btn) => {
+    const buttonRow = document.createElement('div');
+    buttonRow.className = 'd-flex gap-2';
+
+    const acceptBtn = document.createElement('button');
+    acceptBtn.className = 'btn btn-success btn-sm';
+    acceptBtn.dataset.decision = 'accept';
+    acceptBtn.textContent = 'Accept';
+
+    const declineBtn = document.createElement('button');
+    declineBtn.className = 'btn btn-outline-danger btn-sm';
+    declineBtn.dataset.decision = 'decline';
+    declineBtn.textContent = 'Decline';
+
+    [acceptBtn, declineBtn].forEach((btn) => {
       btn.addEventListener('click', async () => {
         try {
           await api('respond_invite', { invite_id: invite.id, decision: btn.dataset.decision });
-          showToast(`Invite ${btn.dataset.decision}ed`, 'success');
+          showToast(btn.dataset.decision === 'accept' ? 'Invite accepted' : 'Invite declined', 'success');
           await fetchMatchmakingState();
         } catch (error) {
           showToast(error.message, 'danger');
         }
       });
     });
+
+    buttonRow.appendChild(acceptBtn);
+    buttonRow.appendChild(declineBtn);
+    card.appendChild(title);
+    card.appendChild(buttonRow);
 
     el.incomingInvites.appendChild(card);
   });
