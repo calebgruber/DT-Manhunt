@@ -12,15 +12,10 @@ $user = currentUser();
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>DT Manhunt</title>
-  <!--====== Bootstrap CSS ======-->
-<link
-  rel="stylesheet"
-  href="https://cdn.ayroui.com/1.0/css/bootstrap.min.css"
-/>
-<!--====== Lineicons CSS ======-->
-<link href="https://cdn.lineicons.com/3.0/lineicons.css" rel="stylesheet" />
-<!--====== Style css ======-->
-<link rel="stylesheet" href="https://cdn.ayroui.com/1.0/css/starter.css" />
+  <!-- Ayro UI CDN -->
+  <link rel="stylesheet" href="https://cdn.ayroui.com/1.0/css/bootstrap.min.css" />
+  <link rel="stylesheet" href="https://cdn.lineicons.com/3.0/lineicons.css" />
+  <link rel="stylesheet" href="https://cdn.ayroui.com/1.0/css/starter.css" />
   <link href="/style.css" rel="stylesheet">
 </head>
 <body class="dark-ui">
@@ -30,7 +25,7 @@ $user = currentUser();
         <span class="eyebrow">SUNY Purchase</span>
         <h1 class="h4 m-0">Manhunt Registration</h1>
       </div>
-      <button id="logoutBtn" class="btn btn-outline-light btn-sm d-none">Logout</button>
+      <button id="logoutBtn" class="btn btn-outline-light btn-sm d-none" type="button">Logout</button>
     </header>
 
     <div id="toastContainer" class="toast-container position-fixed bottom-0 end-0 p-3"></div>
@@ -47,34 +42,50 @@ $user = currentUser();
           </aside>
 
           <section>
-            <ul class="nav nav-pills nav-fill mb-3" role="tablist">
-              <li class="nav-item"><button class="nav-link active" data-auth-tab="login" type="button">Login</button></li>
-              <li class="nav-item"><button class="nav-link" data-auth-tab="register" type="button">Register</button></li>
+            <ul class="nav nav-pills nav-fill mb-3" role="tablist" aria-label="Authentication tabs">
+              <li class="nav-item"><button class="nav-link active" data-auth-tab="login" type="button" aria-controls="loginPanel" aria-selected="true">Login</button></li>
+              <li class="nav-item"><button class="nav-link" data-auth-tab="register" type="button" aria-controls="registerPanel" aria-selected="false">Register</button></li>
             </ul>
 
-            <div id="loginPanel">
+            <div id="loginPanel" role="tabpanel">
               <h2 class="h6 mb-2">Welcome back</h2>
               <p class="small text-muted mb-3">Use your phone and PIN to continue from your saved step.</p>
               <form id="loginForm" class="vstack gap-2">
-                <input class="form-control form-control-lg" name="phone" placeholder="Phone number" required>
-                <input class="form-control form-control-lg" name="pin" placeholder="PIN" inputmode="numeric" type="password" required>
+                <label class="visually-hidden" for="loginPhone">Phone number</label>
+                <input id="loginPhone" class="form-control form-control-lg" name="phone" placeholder="Phone number" type="tel" autocomplete="tel" required>
+                <label class="visually-hidden" for="loginPin">PIN</label>
+                <input id="loginPin" class="form-control form-control-lg" name="pin" placeholder="PIN" inputmode="numeric" pattern="[0-9]{4,8}" autocomplete="current-password" type="password" required>
                 <button class="btn btn-primary btn-lg" type="submit">Sign In</button>
               </form>
             </div>
 
-            <div id="registerPanel" class="d-none">
+            <div id="registerPanel" class="d-none" role="tabpanel">
               <h2 class="h6 mb-2">Create account</h2>
               <p class="small text-muted mb-3">Use your real first and last name for matching.</p>
               <form id="registerForm" class="vstack gap-2">
                 <div class="row g-2">
-                  <div class="col-6"><input class="form-control form-control-lg" name="first_name" placeholder="First name" required></div>
-                  <div class="col-6"><input class="form-control form-control-lg" name="last_name" placeholder="Last name" required></div>
+                  <div class="col-6">
+                    <label class="visually-hidden" for="registerFirstName">First name</label>
+                    <input id="registerFirstName" class="form-control form-control-lg" name="first_name" placeholder="First name" autocomplete="given-name" required>
+                  </div>
+                  <div class="col-6">
+                    <label class="visually-hidden" for="registerLastName">Last name</label>
+                    <input id="registerLastName" class="form-control form-control-lg" name="last_name" placeholder="Last name" autocomplete="family-name" required>
+                  </div>
                 </div>
-                <input class="form-control form-control-lg" name="phone" placeholder="Phone number" required>
-                <input class="form-control form-control-lg" name="pin" placeholder="PIN (4-8 digits)" inputmode="numeric" type="password" required>
+                <label class="visually-hidden" for="registerPhone">Phone number</label>
+                <input id="registerPhone" class="form-control form-control-lg" name="phone" placeholder="Phone number" type="tel" autocomplete="tel" required>
+                <label class="visually-hidden" for="registerPin">PIN (4-8 digits)</label>
+                <input id="registerPin" class="form-control form-control-lg" name="pin" placeholder="PIN (4-8 digits)" inputmode="numeric" pattern="[0-9]{4,8}" autocomplete="new-password" type="password" required>
                 <div class="row g-2">
-                  <div class="col-6"><input class="form-control form-control-lg" name="graduation_year" placeholder="Graduation year" inputmode="numeric" required></div>
-                  <div class="col-6"><input class="form-control form-control-lg" name="concentration" placeholder="Concentration" required></div>
+                  <div class="col-6">
+                    <label class="visually-hidden" for="registerGradYear">Graduation year</label>
+                    <input id="registerGradYear" class="form-control form-control-lg" name="graduation_year" placeholder="Graduation year" inputmode="numeric" pattern="[0-9]{4}" autocomplete="off" required>
+                  </div>
+                  <div class="col-6">
+                    <label class="visually-hidden" for="registerConcentration">Concentration</label>
+                    <input id="registerConcentration" class="form-control form-control-lg" name="concentration" placeholder="Concentration" autocomplete="organization-title" required>
+                  </div>
                 </div>
                 <button class="btn btn-success btn-lg" type="submit">Create Account</button>
               </form>
@@ -111,13 +122,13 @@ $user = currentUser();
               <div class="row g-2">
                 <div class="col-12 col-md-6">
                   <button class="btn btn-outline-light mode-btn w-100" data-mode="solo" type="button">
-                    <i class="bi bi-person-fill d-block fs-2"></i>
+                    <i class="lni lni-user d-block fs-2"></i>
                     <span>Solo</span>
                   </button>
                 </div>
                 <div class="col-12 col-md-6">
                   <button class="btn btn-outline-info mode-btn w-100" data-mode="duo" type="button">
-                    <i class="bi bi-people-fill d-block fs-2"></i>
+                    <i class="lni lni-users d-block fs-2"></i>
                     <span>Duo</span>
                   </button>
                 </div>
@@ -132,7 +143,8 @@ $user = currentUser();
               <div class="match-grid">
                 <div>
                   <div class="input-group mb-2">
-                    <input id="searchInput" class="form-control form-control-lg" placeholder="Search full name">
+                    <label class="visually-hidden" for="searchInput">Search full name</label>
+                    <input id="searchInput" class="form-control form-control-lg" placeholder="Search full name" autocomplete="off">
                     <button id="searchBtn" class="btn btn-primary" type="button">Search</button>
                   </div>
                   <div id="searchResults" class="list-group mb-3"></div>

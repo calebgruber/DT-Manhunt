@@ -71,6 +71,7 @@ function setAuthTab(tab) {
   document.querySelectorAll('[data-auth-tab]').forEach((btn) => {
     const active = btn.dataset.authTab === tab;
     btn.classList.toggle('active', active);
+    btn.setAttribute('aria-selected', active ? 'true' : 'false');
   });
   ui.loginPanel.classList.toggle('d-none', tab !== 'login');
   ui.registerPanel.classList.toggle('d-none', tab !== 'register');
