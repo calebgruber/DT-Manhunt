@@ -23,7 +23,7 @@ body {
 }
 
 .app-container {
-  max-width: 1180px;
+  max-width: 1400px;
 }
 
 .card {
@@ -106,6 +106,81 @@ body {
   height: auto;
 }
 
+.game-shell {
+  min-height: calc(100vh - 130px);
+  padding: 1rem;
+  background: var(--tblr-bg-surface);
+}
+
+.stat-tile {
+  background: var(--tblr-bg-surface-secondary);
+  border: 1px solid var(--tblr-border-color);
+  padding: 0.75rem;
+  text-align: center;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: var(--tblr-secondary);
+}
+
+.stat-value {
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.persistent-alert {
+  border-width: 2px;
+}
+
+.user-map {
+  height: 320px;
+  border: 1px solid var(--tblr-border-color);
+}
+
+.killboard-grid,
+.killboard-grid-admin {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+}
+
+.kb-card {
+  border-radius: 0;
+  padding: 0.75rem;
+  color: #fff;
+}
+
+.kb-in {
+  background: #2b8a3e;
+}
+
+.kb-eliminated {
+  background: #c92a2a;
+}
+
+.kb-seeker {
+  background: #1c7ed6;
+}
+
+.kb-withdrawn {
+  background: #6c757d;
+}
+
+.live-game-mode .navbar,
+.live-game-mode #stepperCard {
+  display: none !important;
+}
+
+.live-game-mode .app-container,
+.live-game-mode .page-wrapper,
+.live-game-mode .page-body,
+.live-game-mode .game-shell {
+  max-width: 100% !important;
+  width: 100% !important;
+}
+
 @media (max-width: 767.98px) {
   .sticky-panel {
     position: sticky;
@@ -119,6 +194,11 @@ body {
 
   .mode-btn {
     min-height: 132px;
+  }
+
+  .game-shell {
+    min-height: auto;
+    padding: 0.5rem;
   }
 }
 

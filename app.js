@@ -11,6 +11,12 @@ const state = {
   currentStep: null,
   locationWatchId: null,
   locationLastSentAt: 0,
+  userMap: null,
+  userMapMarkers: { self: null, mate: null },
+  liveFullscreenAttempted: false,
+  clockTickTimer: null,
+  clockRenderSeconds: null,
+  clockDirection: 'down',
 };
 
 const ui = {
@@ -50,19 +56,27 @@ const ui = {
   userAlertText: document.getElementById('userAlertText'),
   acknowledgeAlertBtn: document.getElementById('acknowledgeAlertBtn'),
   dashboardStatusLine: document.getElementById('dashboardStatusLine'),
-  dashboardAnnouncement: document.getElementById('dashboardAnnouncement'),
-  dashboardMessages: document.getElementById('dashboardMessages'),
+  dashboardRoleLine: document.getElementById('dashboardRoleLine'),
+  openIncidentModalBtn: document.getElementById('openIncidentModalBtn'),
   incidentForm: document.getElementById('incidentForm'),
-  dashboardIncidents: document.getElementById('dashboardIncidents'),
+  withdrawBtn: document.getElementById('withdrawBtn'),
+  statInCount: document.getElementById('statInCount'),
+  statSeekerCount: document.getElementById('statSeekerCount'),
+  statEliminatedCount: document.getElementById('statEliminatedCount'),
+  gameClockValue: document.getElementById('gameClockValue'),
+  persistentMessageAlerts: document.getElementById('persistentMessageAlerts'),
+  duoInfoPanel: document.getElementById('duoInfoPanel'),
+  userMap: document.getElementById('userMap'),
+  userMapFullscreenBtn: document.getElementById('userMapFullscreenBtn'),
+  userKillboardFullscreenBtn: document.getElementById('userKillboardFullscreenBtn'),
   killboardSummary: document.getElementById('killboardSummary'),
   killboardCards: document.getElementById('killboardCards'),
-  unenrollBtn: document.getElementById('unenrollBtn'),
+  userGameShell: document.getElementById('userGameShell'),
+  incidentModal: document.getElementById('incidentModal'),
 };
 
 function setLoading(show, text = 'Loading...') {
-  if (text) {
-    ui.loadingText.textContent = text;
-  }
+  if (text) ui.loadingText.textContent = text;
   ui.loadingOverlay.classList.toggle('is-visible', show);
 }
 
@@ -73,9 +87,7 @@ function beginLoading(text) {
 
 function endLoading() {
   state.activeRequests = Math.max(0, state.activeRequests - 1);
-  if (state.activeRequests === 0) {
-    setLoading(false);
-  }
+  if (state.activeRequests === 0) setLoading(false);
 }
 
 function toast(message, type = 'primary') {
@@ -100,17 +112,12 @@ function toast(message, type = 'primary') {
     const t = new bootstrap.Toast(wrapper, { delay: 3000 });
     t.show();
     wrapper.addEventListener('hidden.bs.toast', () => wrapper.remove());
-    return;
   }
-  wrapper.classList.add('show');
-  setTimeout(() => wrapper.remove(), 3000);
 }
 
 async function api(action, payload = {}, options = {}) {
   const { loading = true, loadingText = 'Loading...' } = options;
-  if (loading) {
-    beginLoading(loadingText);
-  }
+  if (loading) beginLoading(loadingText);
   try {
     const res = await fetch('/api.php', {
       method: 'POST',
@@ -118,14 +125,10 @@ async function api(action, payload = {}, options = {}) {
       body: JSON.stringify({ action, ...payload }),
     });
     const data = await res.json();
-    if (!data.ok) {
-      throw new Error(data.message || 'Request failed');
-    }
+    if (!data.ok) throw new Error(data.message || 'Request failed');
     return data;
   } finally {
-    if (loading) {
-      endLoading();
-    }
+    if (loading) endLoading();
   }
 }
 
@@ -146,208 +149,218 @@ function renderStepper(step) {
   labels.forEach((label, i) => {
     const node = document.createElement('div');
     node.className = `step ${i <= idx ? 'active' : ''}`;
-    const badge = document.createElement('span');
-    badge.textContent = String(i + 1);
-    const text = document.createElement('small');
-    text.textContent = label;
-    node.append(badge, text);
+    node.innerHTML = `<span>${i + 1}</span><small>${label}</small>`;
     ui.stepper.appendChild(node);
   });
 }
 
 function showStep(step) {
-  if (state.currentStep === step) {
-    return;
-  }
+  if (state.currentStep === step) return;
   [ui.profileStep, ui.modeStep, ui.matchmakingStep, ui.paymentStep, ui.completeStep].forEach((el) => el.classList.add('d-none'));
-
   let activeStep = ui.completeStep;
   if (step === 'profile') activeStep = ui.profileStep;
   else if (step === 'mode') activeStep = ui.modeStep;
   else if (step === 'matchmaking') activeStep = ui.matchmakingStep;
   else if (step === 'payment') activeStep = ui.paymentStep;
-
   activeStep.classList.remove('d-none');
   state.currentStep = step;
 }
 
 function stopLocationWatch() {
-  if (state.locationWatchId !== null && navigator.geolocation) {
-    navigator.geolocation.clearWatch(state.locationWatchId);
-  }
+  if (state.locationWatchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(state.locationWatchId);
   state.locationWatchId = null;
 }
 
 async function sendLocation(position) {
   const now = Date.now();
-  if (now - state.locationLastSentAt < 10000) {
-    return;
-  }
+  if (now - state.locationLastSentAt < 60000) return;
   state.locationLastSentAt = now;
   try {
-    await api(
-      'update_location',
-      {
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-        accuracy: position.coords.accuracy,
-      },
-      { loading: false }
-    );
+    await api('update_location', {
+      latitude: position.coords.latitude,
+      longitude: position.coords.longitude,
+      accuracy: position.coords.accuracy,
+    }, { loading: false });
   } catch (_) {
-    // silent during background location updates
+    // silent
   }
 }
 
 function maybeStartLocationWatch() {
-  if (!state.user || !state.dashboard) {
-    stopLocationWatch();
-    return;
-  }
-  const shouldTrack = state.user.is_enrolled && state.dashboard.game_stage === 'live';
-  if (!shouldTrack) {
-    stopLocationWatch();
-    return;
-  }
-  if (!navigator.geolocation || state.locationWatchId !== null) {
-    return;
-  }
-  state.locationWatchId = navigator.geolocation.watchPosition(
-    sendLocation,
-    () => {
-      // no-op on geolocation errors
-    },
-    { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
-  );
+  if (!state.user || !state.dashboard) return stopLocationWatch();
+  const shouldTrack = state.dashboard.game_stage === 'live' && state.user.game_status !== 'withdrawn';
+  if (!shouldTrack || !navigator.geolocation) return stopLocationWatch();
+  if (state.locationWatchId !== null) return;
+  state.locationWatchId = navigator.geolocation.watchPosition(sendLocation, () => {}, {
+    enableHighAccuracy: true,
+    maximumAge: 60000,
+    timeout: 15000,
+  });
 }
 
-function renderMessages(messages) {
-  ui.dashboardMessages.textContent = '';
+function formatClock(seconds) {
+  const safe = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(safe / 3600);
+  const m = Math.floor((safe % 3600) / 60);
+  const s = safe % 60;
+  if (h > 0) return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function stopClockTick() {
+  if (!state.clockTickTimer) return;
+  clearInterval(state.clockTickTimer);
+  state.clockTickTimer = null;
+}
+
+function startClockTick() {
+  stopClockTick();
+  if (state.clockRenderSeconds === null) return;
+  state.clockTickTimer = setInterval(() => {
+    if (state.clockDirection === 'down') {
+      state.clockRenderSeconds = Math.max(0, state.clockRenderSeconds - 1);
+    } else {
+      state.clockRenderSeconds += 1;
+    }
+    ui.gameClockValue.textContent = formatClock(state.clockRenderSeconds);
+  }, 1000);
+}
+
+function ensureUserMap() {
+  if (!ui.userMap || !window.L || state.userMap) return;
+  state.userMap = L.map('userMap').setView([41.04, -73.7], 14);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap &copy; CARTO',
+  }).addTo(state.userMap);
+}
+
+function updateUserMap(dashboard) {
+  ensureUserMap();
+  if (!state.userMap) return;
+  const points = [];
+
+  const selfLoc = dashboard?.duo?.self_location;
+  if (selfLoc?.latitude != null && selfLoc?.longitude != null) {
+    points.push([selfLoc.latitude, selfLoc.longitude]);
+    if (!state.userMapMarkers.self) {
+      state.userMapMarkers.self = L.marker([selfLoc.latitude, selfLoc.longitude]).addTo(state.userMap).bindPopup('You');
+    } else {
+      state.userMapMarkers.self.setLatLng([selfLoc.latitude, selfLoc.longitude]);
+    }
+  }
+
+  const mate = dashboard?.duo?.teammate;
+  const mateLoc = dashboard?.duo?.teammate_location;
+  if (mate && mateLoc?.latitude != null && mateLoc?.longitude != null) {
+    points.push([mateLoc.latitude, mateLoc.longitude]);
+    if (!state.userMapMarkers.mate) {
+      state.userMapMarkers.mate = L.marker([mateLoc.latitude, mateLoc.longitude]).addTo(state.userMap).bindPopup(mate.full_name);
+    } else {
+      state.userMapMarkers.mate.setLatLng([mateLoc.latitude, mateLoc.longitude]);
+      state.userMapMarkers.mate.bindPopup(mate.full_name);
+    }
+  }
+
+  if (points.length) {
+    const bounds = L.latLngBounds(points);
+    state.userMap.fitBounds(bounds.pad(0.3));
+  }
+}
+
+function renderPersistentAlerts(messages) {
+  ui.persistentMessageAlerts.textContent = '';
   if (!messages.length) {
-    const empty = document.createElement('div');
-    empty.className = 'text-secondary small';
-    empty.textContent = 'No messages yet.';
-    ui.dashboardMessages.appendChild(empty);
+    ui.persistentMessageAlerts.innerHTML = '<div class="alert alert-secondary mb-0">No active admin alerts.</div>';
     return;
   }
 
   messages.forEach((msg) => {
-    const row = document.createElement('div');
-    row.className = `p-2 rounded border ${msg.is_read ? 'bg-transparent' : 'bg-azure-lt'}`;
-
-    const top = document.createElement('div');
-    top.className = 'd-flex justify-content-between gap-2';
-    const scope = document.createElement('small');
-    scope.className = 'text-secondary';
-    scope.textContent = msg.recipient_scope;
-    const time = document.createElement('small');
-    time.className = 'text-secondary';
-    time.textContent = new Date(msg.created_at).toLocaleString();
-    top.append(scope, time);
-
-    const body = document.createElement('div');
-    body.className = 'fw-medium';
-    body.textContent = msg.body;
-
-    row.append(top, body);
-
-    if (!msg.is_read) {
-      const markBtn = document.createElement('button');
-      markBtn.className = 'btn btn-sm btn-outline-secondary mt-2';
-      markBtn.type = 'button';
-      markBtn.textContent = 'Mark read';
-      markBtn.addEventListener('click', async () => {
-        try {
-          await api('mark_message_read', { message_id: msg.message_id }, { loading: false });
-          await refreshState(true);
-        } catch (error) {
-          toast(error.message, 'danger');
-        }
-      });
-      row.appendChild(markBtn);
-    }
-
-    ui.dashboardMessages.appendChild(row);
-  });
-}
-
-function renderIncidents(incidents) {
-  ui.dashboardIncidents.textContent = '';
-  if (!incidents.length) {
-    const empty = document.createElement('div');
-    empty.className = 'text-secondary small';
-    empty.textContent = 'No incidents submitted.';
-    ui.dashboardIncidents.appendChild(empty);
-    return;
-  }
-
-  incidents.forEach((incident) => {
-    const card = document.createElement('div');
-    card.className = 'border rounded p-2';
-    card.innerHTML = `
-      <div class="d-flex justify-content-between gap-2">
-        <strong>${incident.incident_type}</strong>
-        <span class="badge bg-secondary-lt text-secondary">${incident.severity}</span>
-      </div>
-      <div class="small text-secondary mb-1">${new Date(incident.created_at).toLocaleString()}</div>
-      <div class="mb-1">${incident.details}</div>
-      <div class="small">Status: <span class="fw-semibold">${incident.status}</span></div>
-    `;
-    ui.dashboardIncidents.appendChild(card);
+    const alert = document.createElement('div');
+    alert.className = 'alert alert-danger mb-0 persistent-alert';
+    alert.innerHTML = `<div class="fw-semibold mb-1">${msg.recipient_scope}</div><div>${msg.body}</div><small class="text-white-50">${new Date(msg.created_at).toLocaleString()}</small>`;
+    ui.persistentMessageAlerts.appendChild(alert);
   });
 }
 
 function renderKillboard(killboard) {
-  const counts = killboard?.counts || { in: 0, eliminated: 0, out: 0 };
-  ui.killboardSummary.textContent = `In: ${counts.in} • Eliminated: ${counts.eliminated} • Out: ${counts.out}`;
+  const counts = killboard?.counts || { in: 0, seeker: 0, eliminated: 0, withdrawn: 0 };
+  ui.killboardSummary.textContent = `In: ${counts.in} • Seekers: ${counts.seeker} • Eliminated: ${counts.eliminated} • Withdrawn: ${counts.withdrawn}`;
   ui.killboardCards.textContent = '';
 
   const players = killboard?.players || [];
   if (!players.length) {
-    const empty = document.createElement('div');
-    empty.className = 'text-secondary small';
-    empty.textContent = 'No players yet.';
-    ui.killboardCards.appendChild(empty);
+    ui.killboardCards.innerHTML = '<div class="text-secondary small">No players yet.</div>';
     return;
   }
 
   players.forEach((player) => {
-    const col = document.createElement('div');
-    col.className = 'col-12 col-md-6 col-xl-4';
-    const badgeClass = player.status === 'in'
-      ? 'bg-success-lt text-success'
+    const card = document.createElement('div');
+    const statusClass = player.status === 'in'
+      ? 'kb-in'
       : player.status === 'eliminated'
-        ? 'bg-warning-lt text-warning'
-        : 'bg-secondary-lt text-secondary';
-
-    col.innerHTML = `
-      <div class="card card-sm">
-        <div class="card-body d-flex justify-content-between align-items-center gap-2">
-          <div>
-            <div class="fw-semibold">${player.full_name}</div>
-            <div class="small text-secondary">${player.mode || 'unset'} mode</div>
-          </div>
-          <span class="badge ${badgeClass}">${player.status}</span>
-        </div>
-      </div>
-    `;
-    ui.killboardCards.appendChild(col);
+        ? 'kb-eliminated'
+        : player.status === 'seeker'
+          ? 'kb-seeker'
+          : 'kb-withdrawn';
+    card.className = `kb-card ${statusClass}`;
+    card.innerHTML = `<div class="fw-semibold">${player.full_name}</div><div class="small">${player.status}</div>`;
+    ui.killboardCards.appendChild(card);
   });
+}
+
+function renderDuoInfo(dashboard) {
+  const mate = dashboard?.duo?.teammate;
+  const selfLoc = dashboard?.duo?.self_location;
+  const mateLoc = dashboard?.duo?.teammate_location;
+  const lines = [];
+  lines.push(`<div><strong>You:</strong> ${state.user?.full_name || 'Unknown'}</div>`);
+  lines.push(`<div><strong>Duo:</strong> ${mate ? mate.full_name : 'No teammate (solo)'}</div>`);
+  lines.push(`<div><strong>Your location:</strong> ${selfLoc?.latitude != null ? `${selfLoc.latitude.toFixed(5)}, ${selfLoc.longitude.toFixed(5)}` : 'Awaiting location'}</div>`);
+  if (mate) {
+    lines.push(`<div><strong>Duo location:</strong> ${mateLoc?.latitude != null ? `${mateLoc.latitude.toFixed(5)}, ${mateLoc.longitude.toFixed(5)}` : 'Awaiting teammate location'}</div>`);
+  }
+  ui.duoInfoPanel.innerHTML = lines.join('');
+}
+
+function updateLiveModeClass(dashboard) {
+  const live = dashboard?.game_stage === 'live';
+  document.body.classList.toggle('live-game-mode', live);
+  if (!live) {
+    state.liveFullscreenAttempted = false;
+    return;
+  }
+  if (state.liveFullscreenAttempted) return;
+  state.liveFullscreenAttempted = true;
+  if (ui.userGameShell?.requestFullscreen) {
+    ui.userGameShell.requestFullscreen().catch(() => {});
+  }
 }
 
 function renderDashboard() {
   const dashboard = state.dashboard;
-  if (!dashboard) {
-    return;
-  }
+  if (!dashboard) return;
 
-  const stage = dashboard.game_stage || 'pregame';
-  const gameInfo = dashboard.game_info ? ` • ${dashboard.game_info}` : '';
-  ui.dashboardStatusLine.textContent = `Stage: ${stage}${gameInfo} • Unread messages: ${dashboard.unread_messages || 0}`;
-  ui.dashboardAnnouncement.textContent = dashboard.announcement || 'No announcement yet.';
-  renderMessages(dashboard.inbox || []);
-  renderIncidents(dashboard.incidents || []);
+  const role = dashboard.role || 'hider';
+  ui.dashboardRoleLine.textContent = `You are a: ${role}`;
+  ui.dashboardStatusLine.textContent = `Stage: ${dashboard.game_stage} • Phase: ${dashboard.clock?.phase || 'idle'} • ${dashboard.game_info || ''}`;
+
+  const stats = dashboard.stats || { in: 0, seeker: 0, eliminated: 0 };
+  ui.statInCount.textContent = String(stats.in || 0);
+  ui.statSeekerCount.textContent = String(stats.seeker || 0);
+  ui.statEliminatedCount.textContent = String(stats.eliminated || 0);
+
+  const clock = dashboard.clock || { seconds: 0, direction: 'down' };
+  state.clockRenderSeconds = Math.max(0, Number(clock.seconds || 0));
+  state.clockDirection = clock.direction === 'up' ? 'up' : 'down';
+  ui.gameClockValue.textContent = formatClock(state.clockRenderSeconds);
+  startClockTick();
+
+  renderPersistentAlerts(dashboard.active_alerts || []);
+  renderDuoInfo(dashboard);
   renderKillboard(dashboard.killboard || {});
+  updateUserMap(dashboard);
+  updateLiveModeClass(dashboard);
 }
 
 function renderUser() {
@@ -362,13 +375,13 @@ function renderUser() {
     ui.loggedInUserLabel.textContent = '';
     ui.userAlertBanner.classList.add('d-none');
     stopLocationWatch();
+    stopClockTick();
     stopPolling();
     state.currentStep = null;
     return;
   }
 
   ui.loggedInUserLabel.textContent = `Logged in: ${state.user.full_name}`;
-
   const alertText = (state.user.pending_alert || '').trim();
   ui.userAlertBanner.classList.toggle('d-none', !alertText);
   ui.userAlertText.textContent = alertText;
@@ -380,16 +393,8 @@ function renderUser() {
   ui.profileSummary.textContent = `${state.user.full_name} • ${state.user.graduation_year} • ${state.user.concentration}`;
 
   ui.paymentInfo.textContent = '';
-  const modeLine = document.createElement('div');
-  modeLine.className = 'small text-muted';
-  modeLine.textContent = `Mode: ${state.user.mode || 'Not selected'}`;
-  const statusLine = document.createElement('div');
-  statusLine.className = 'small mt-1';
   const paymentStatus = state.user.payment_status || 'pending';
-  statusLine.textContent = `Payment status: ${paymentStatus}`;
-  const mateLine = document.createElement('div');
-  mateLine.textContent = state.matchmaking?.teammate ? `Teammate: ${state.matchmaking.teammate.full_name}` : 'Teammate: none';
-  ui.paymentInfo.append(modeLine, statusLine, mateLine);
+  ui.paymentInfo.innerHTML = `<div class="small text-muted">Mode: ${state.user.mode || 'Not selected'}</div><div class="small mt-1">Payment status: ${paymentStatus}</div><div>Teammate: ${state.matchmaking?.teammate ? state.matchmaking.teammate.full_name : 'none'}</div>`;
 
   const venmo = (state.venmoLink || '').trim();
   if (venmo) {
@@ -430,33 +435,20 @@ async function refreshState(quiet = false) {
 function renderSearchResults(results) {
   ui.searchResults.textContent = '';
   if (!results.length) {
-    const empty = document.createElement('div');
-    empty.className = 'small text-muted';
-    empty.textContent = 'No results found.';
-    ui.searchResults.appendChild(empty);
+    ui.searchResults.innerHTML = '<div class="small text-muted">No results found.</div>';
     return;
   }
 
   results.forEach((row) => {
     const item = document.createElement('div');
     item.className = 'list-group-item list-group-item-action';
-
-    const wrap = document.createElement('div');
-    wrap.className = 'd-flex justify-content-between align-items-center gap-2';
-
-    const info = document.createElement('div');
-    const name = document.createElement('div');
-    name.className = 'fw-semibold';
-    name.textContent = row.full_name;
-    const meta = document.createElement('small');
-    meta.className = 'text-muted';
-    meta.textContent = `${row.graduation_year} • ${row.concentration}`;
-
-    const inviteBtn = document.createElement('button');
-    inviteBtn.className = 'btn btn-sm btn-primary';
-    inviteBtn.type = 'button';
-    inviteBtn.textContent = 'Invite';
-    inviteBtn.addEventListener('click', async () => {
+    item.innerHTML = `
+      <div class="d-flex justify-content-between align-items-center gap-2">
+        <div><div class="fw-semibold">${row.full_name}</div><small class="text-muted">${row.graduation_year} • ${row.concentration}</small></div>
+        <button class="btn btn-sm btn-primary">Invite</button>
+      </div>
+    `;
+    item.querySelector('button').addEventListener('click', async () => {
       try {
         await api('send_invite', { invitee_user_id: row.id });
         toast(`Invite sent to ${row.full_name}`, 'success');
@@ -465,10 +457,6 @@ function renderSearchResults(results) {
         toast(error.message, 'danger');
       }
     });
-
-    info.append(name, meta);
-    wrap.append(info, inviteBtn);
-    item.appendChild(wrap);
     ui.searchResults.appendChild(item);
   });
 }
@@ -476,38 +464,16 @@ function renderSearchResults(results) {
 function renderIncoming(incoming) {
   ui.incomingInvites.textContent = '';
   if (!incoming.length) {
-    const empty = document.createElement('div');
-    empty.className = 'small text-muted';
-    empty.textContent = 'No incoming invites.';
-    ui.incomingInvites.appendChild(empty);
+    ui.incomingInvites.innerHTML = '<div class="small text-muted">No incoming invites.</div>';
     return;
   }
-
   incoming.forEach((invite) => {
     const card = document.createElement('div');
     card.className = 'invite-card';
-
-    const text = document.createElement('div');
-    text.className = 'fw-semibold mb-2';
-    text.textContent = `${invite.inviter_full_name} invited you`;
-
-    const actions = document.createElement('div');
-    actions.className = 'd-flex gap-2';
-
-    const accept = document.createElement('button');
-    accept.className = 'btn btn-success btn-sm';
-    accept.type = 'button';
-    accept.textContent = 'Accept';
+    card.innerHTML = `<div class="fw-semibold mb-2">${invite.inviter_full_name} invited you</div><div class="d-flex gap-2"><button class="btn btn-success btn-sm">Accept</button><button class="btn btn-outline-light btn-sm">Decline</button></div>`;
+    const [accept, decline] = card.querySelectorAll('button');
     accept.addEventListener('click', () => replyInvite(invite.id, 'accept'));
-
-    const decline = document.createElement('button');
-    decline.className = 'btn btn-outline-light btn-sm';
-    decline.type = 'button';
-    decline.textContent = 'Decline';
     decline.addEventListener('click', () => replyInvite(invite.id, 'decline'));
-
-    actions.append(accept, decline);
-    card.append(text, actions);
     ui.incomingInvites.appendChild(card);
   });
 }
@@ -517,7 +483,6 @@ function renderOutgoing(outgoing) {
     ui.outgoingInvite.textContent = 'No outgoing invite.';
     return;
   }
-
   let text = `Invite to ${outgoing.invitee_full_name}: ${outgoing.status}`;
   if (outgoing.status === 'declined') text += ' — choose a new teammate.';
   if (outgoing.status === 'accepted') text += ' — moving to payment.';
@@ -539,15 +504,9 @@ async function loadMatchmakingState() {
   try {
     const data = await api('matchmaking_state', {}, { loading: false });
     state.user = data.user;
-    state.matchmaking = {
-      incoming: data.incoming,
-      outgoing: data.outgoing,
-      teammate: data.teammate,
-    };
-
+    state.matchmaking = { incoming: data.incoming, outgoing: data.outgoing, teammate: data.teammate };
     renderIncoming(data.incoming || []);
     renderOutgoing(data.outgoing || null);
-
     if (state.matchmaking.teammate) {
       ui.teammateCard.classList.remove('d-none');
       ui.teammateCard.textContent = `Matched with ${state.matchmaking.teammate.full_name}. Continue to payment.`;
@@ -561,9 +520,7 @@ async function loadMatchmakingState() {
       renderUser();
     }
   } catch (error) {
-    if (!state.pollBusy) {
-      toast(error.message, 'danger');
-    }
+    if (!state.pollBusy) toast(error.message, 'danger');
   }
 }
 
@@ -582,7 +539,7 @@ async function pollTick() {
     state.dashboard = data.dashboard || null;
     renderUser();
   } catch (_) {
-    // keep quiet during background polling
+    // silent polling errors
   } finally {
     state.pollBusy = false;
   }
@@ -600,10 +557,17 @@ function stopPolling() {
   state.pollTimer = null;
 }
 
+function toggleFullscreen(element) {
+  if (!element) return;
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {});
+    return;
+  }
+  if (element.requestFullscreen) element.requestFullscreen().catch(() => {});
+}
+
 function wireEvents() {
-  document.querySelectorAll('[data-auth-tab]').forEach((btn) => {
-    btn.addEventListener('click', () => setAuthTab(btn.dataset.authTab));
-  });
+  document.querySelectorAll('[data-auth-tab]').forEach((btn) => btn.addEventListener('click', () => setAuthTab(btn.dataset.authTab)));
 
   ui.loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -638,6 +602,7 @@ function wireEvents() {
       state.matchmaking = null;
       state.dashboard = null;
       stopLocationWatch();
+      stopClockTick();
       renderUser();
       toast('Logged out', 'secondary');
     } catch (error) {
@@ -716,31 +681,45 @@ function wireEvents() {
     }
   });
 
+  ui.openIncidentModalBtn?.addEventListener('click', () => {
+    if (window.bootstrap?.Modal) {
+      const modal = bootstrap.Modal.getOrCreateInstance(ui.incidentModal);
+      modal.show();
+    }
+  });
+
   ui.incidentForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
     try {
       const payload = Object.fromEntries(new FormData(ui.incidentForm).entries());
       await api('report_incident', payload, { loadingText: 'Submitting incident...' });
       ui.incidentForm.reset();
-      toast('Incident report sent to admins.', 'success');
+      if (window.bootstrap?.Modal) {
+        const modal = bootstrap.Modal.getOrCreateInstance(ui.incidentModal);
+        modal.hide();
+      }
+      toast('Incident report sent to admins.', 'danger');
       await refreshState(true);
     } catch (error) {
       toast(error.message, 'danger');
     }
   });
 
-  ui.unenrollBtn?.addEventListener('click', async () => {
-    const confirmed = window.confirm('Are you sure you want to unenroll? This will remove you from active gameplay.');
+  ui.withdrawBtn?.addEventListener('click', async () => {
+    const confirmed = window.confirm('Withdraw from the game? You will remain withdrawn until admins reset the game.');
     if (!confirmed) return;
     try {
-      const data = await api('unenroll', {}, { loadingText: 'Unenrolling...' });
+      const data = await api('withdraw_game', {}, { loadingText: 'Withdrawing...' });
       state.user = data.user;
       await refreshState();
-      toast('You have been unenrolled.', 'warning');
+      toast('You are now withdrawn from the game.', 'warning');
     } catch (error) {
       toast(error.message, 'danger');
     }
   });
+
+  ui.userMapFullscreenBtn?.addEventListener('click', () => toggleFullscreen(ui.userMap?.parentElement?.parentElement));
+  ui.userKillboardFullscreenBtn?.addEventListener('click', () => toggleFullscreen(ui.killboardCards?.parentElement?.parentElement));
 }
 
 async function init() {

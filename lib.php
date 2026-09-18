@@ -402,7 +402,7 @@ function canBeMatched(array $user): bool
     return in_array((string) ($user['registration_step'] ?? ''), ['profile', 'mode', 'matchmaking'], true)
         && ($user['teammate_user_id'] ?? null) === null
         && (int) ($user['is_enrolled'] ?? 1) === 1
-        && (string) ($user['game_status'] ?? 'in') !== 'eliminated';
+        && in_array((string) ($user['game_status'] ?? 'in'), ['in', 'seeker'], true);
 }
 
 function appSetting(string $key, string $default = ''): string

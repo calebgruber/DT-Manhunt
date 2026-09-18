@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
   payment_status ENUM('pending','submitted','approved') NOT NULL DEFAULT 'pending',
   is_admin TINYINT(1) NOT NULL DEFAULT 0,
   is_enrolled TINYINT(1) NOT NULL DEFAULT 1,
-  game_status ENUM('in','eliminated','out') NOT NULL DEFAULT 'in',
+  game_status ENUM('in','eliminated','seeker','withdrawn') NOT NULL DEFAULT 'in',
   pending_alert TEXT NOT NULL,
   latitude DECIMAL(10,7) NULL,
   longitude DECIMAL(10,7) NULL,

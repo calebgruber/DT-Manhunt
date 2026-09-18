@@ -11,14 +11,20 @@ const ui = {
   adminNotice: document.getElementById('adminNotice'),
   adminLoginForm: document.getElementById('adminLoginForm'),
   adminLogoutBtn: document.getElementById('adminLogoutBtn'),
+  incidentBanner: document.getElementById('incidentBanner'),
   venmoForm: document.getElementById('venmoForm'),
   venmoLink: document.getElementById('venmoLink'),
   paymentsBody: document.getElementById('paymentsBody'),
   matchesBody: document.getElementById('matchesBody'),
   gameStateForm: document.getElementById('gameStateForm'),
   gameStage: document.getElementById('gameStage'),
+  clockMode: document.getElementById('clockMode'),
+  hideDurationSeconds: document.getElementById('hideDurationSeconds'),
+  seekDurationSeconds: document.getElementById('seekDurationSeconds'),
   announcementText: document.getElementById('announcementText'),
   gameInfoText: document.getElementById('gameInfoText'),
+  startGameBtn: document.getElementById('startGameBtn'),
+  resetGameBtn: document.getElementById('resetGameBtn'),
   messageForm: document.getElementById('messageForm'),
   messageTarget: document.getElementById('messageTarget'),
   messageUserId: document.getElementById('messageUserId'),
@@ -26,7 +32,10 @@ const ui = {
   messageText: document.getElementById('messageText'),
   messagesFeed: document.getElementById('messagesFeed'),
   locationsBody: document.getElementById('locationsBody'),
+  adminMapFullscreenBtn: document.getElementById('adminMapFullscreenBtn'),
+  adminKillboardFullscreenBtn: document.getElementById('adminKillboardFullscreenBtn'),
   killboardSummary: document.getElementById('killboardSummary'),
+  killboardCards: document.getElementById('killboardCards'),
   killboardBody: document.getElementById('killboardBody'),
   incidentsBody: document.getElementById('incidentsBody'),
 };
@@ -37,6 +46,16 @@ function notice(message, type = 'info') {
   ui.adminNotice.classList.remove('d-none');
 }
 
+function setTabs(tab) {
+  document.querySelectorAll('[data-admin-tab]').forEach((btn) => {
+    const active = btn.dataset.adminTab === tab;
+    btn.classList.toggle('active', active);
+  });
+  document.querySelectorAll('[data-admin-panel]').forEach((panel) => {
+    panel.classList.toggle('d-none', panel.dataset.adminPanel !== tab);
+  });
+}
+
 async function api(action, payload = {}) {
   const res = await fetch('/api.php', {
     method: 'POST',
@@ -44,54 +63,47 @@ async function api(action, payload = {}) {
     body: JSON.stringify({ action, ...payload }),
   });
   const data = await res.json();
-  if (!data.ok) {
-    throw new Error(data.message || 'Request failed');
-  }
+  if (!data.ok) throw new Error(data.message || 'Request failed');
   return data;
 }
 
 function ensureMap() {
-  if (state.map || !window.L) {
-    return;
-  }
+  if (state.map || !window.L) return;
   state.map = L.map('liveMap').setView([41.04, -73.7], 14);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
     maxZoom: 19,
-    attribution: '&copy; OpenStreetMap contributors',
+    attribution: '&copy; OpenStreetMap &copy; CARTO',
   }).addTo(state.map);
+}
+
+function toggleFullscreen(element) {
+  if (!element) return;
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {});
+  } else if (element.requestFullscreen) {
+    element.requestFullscreen().catch(() => {});
+  }
 }
 
 function renderPayments(payments) {
   ui.paymentsBody.textContent = '';
   if (!payments.length) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = '<td colspan="4" class="text-secondary">No payment approvals pending.</td>';
-    ui.paymentsBody.appendChild(tr);
+    ui.paymentsBody.innerHTML = '<tr><td colspan="4" class="text-secondary">No payment approvals pending.</td></tr>';
     return;
   }
 
   payments.forEach((payment) => {
     const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><div class="fw-semibold">${payment.full_name}</div><small class="text-secondary">${payment.phone}</small></td>
+      <td>${payment.payment_status}</td>
+      <td>${payment.registration_step}</td>
+      <td></td>
+    `;
+    const actions = tr.children[3];
 
-    const userTd = document.createElement('td');
-    const userName = document.createElement('div');
-    userName.className = 'fw-semibold';
-    userName.textContent = payment.full_name;
-    const userPhone = document.createElement('small');
-    userPhone.className = 'text-secondary';
-    userPhone.textContent = payment.phone;
-    userTd.append(userName, userPhone);
-
-    const statusTd = document.createElement('td');
-    statusTd.textContent = payment.payment_status;
-
-    const stepTd = document.createElement('td');
-    stepTd.textContent = payment.registration_step;
-
-    const actionTd = document.createElement('td');
     const approveBtn = document.createElement('button');
     approveBtn.className = 'btn btn-sm btn-success me-2';
-    approveBtn.type = 'button';
     approveBtn.textContent = 'Approve';
     approveBtn.disabled = payment.payment_status === 'approved';
     approveBtn.addEventListener('click', async () => {
@@ -106,21 +118,19 @@ function renderPayments(payments) {
 
     const resetBtn = document.createElement('button');
     resetBtn.className = 'btn btn-sm btn-outline-warning';
-    resetBtn.type = 'button';
-    resetBtn.textContent = 'Reset to Pending';
+    resetBtn.textContent = 'Reset';
     resetBtn.disabled = payment.payment_status === 'pending';
     resetBtn.addEventListener('click', async () => {
       try {
         await api('admin_reset_payment', { user_id: payment.id });
-        notice(`Reset payment to pending for ${payment.full_name}`, 'success');
+        notice(`Reset payment for ${payment.full_name}`, 'success');
         await refreshAdminData();
       } catch (error) {
         notice(error.message, 'danger');
       }
     });
 
-    actionTd.append(approveBtn, resetBtn);
-    tr.append(userTd, statusTd, stepTd, actionTd);
+    actions.append(approveBtn, resetBtn);
     ui.paymentsBody.appendChild(tr);
   });
 }
@@ -128,33 +138,26 @@ function renderPayments(payments) {
 function renderMatches(matches) {
   ui.matchesBody.textContent = '';
   if (!matches.length) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = '<td colspan="4" class="text-secondary">No active matched duos.</td>';
-    ui.matchesBody.appendChild(tr);
+    ui.matchesBody.innerHTML = '<tr><td colspan="4" class="text-secondary">No active matched duos.</td></tr>';
     return;
   }
 
   matches.forEach((match) => {
     const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><div class="fw-semibold">${match.user_a_name}</div><div class="fw-semibold">${match.user_b_name}</div></td>
+      <td><div>${match.user_a_payment}</div><div>${match.user_b_payment}</div></td>
+      <td><div>${match.user_a_step}</div><div>${match.user_b_step}</div></td>
+      <td></td>
+    `;
 
-    const pairTd = document.createElement('td');
-    pairTd.innerHTML = `<div class="fw-semibold">${match.user_a_name}</div><div class="fw-semibold">${match.user_b_name}</div>`;
-
-    const paymentTd = document.createElement('td');
-    paymentTd.innerHTML = `<div>${match.user_a_payment}</div><div>${match.user_b_payment}</div>`;
-
-    const stepTd = document.createElement('td');
-    stepTd.innerHTML = `<div>${match.user_a_step}</div><div>${match.user_b_step}</div>`;
-
-    const actionsTd = document.createElement('td');
+    const actions = tr.children[3];
     const resetBtn = document.createElement('button');
     resetBtn.className = 'btn btn-sm btn-outline-warning me-2';
-    resetBtn.type = 'button';
-    resetBtn.textContent = 'Reset to Matching';
+    resetBtn.textContent = 'Reset Match';
     resetBtn.addEventListener('click', async () => {
       try {
         await api('admin_reset_match', { user_id: match.user_a_id });
-        notice('Match reset to duo matchmaking.', 'success');
         await refreshAdminData();
       } catch (error) {
         notice(error.message, 'danger');
@@ -163,20 +166,17 @@ function renderMatches(matches) {
 
     const soloBtn = document.createElement('button');
     soloBtn.className = 'btn btn-sm btn-outline-primary';
-    soloBtn.type = 'button';
-    soloBtn.textContent = 'Switch Pair to Solo';
+    soloBtn.textContent = 'Switch to Solo';
     soloBtn.addEventListener('click', async () => {
       try {
         await api('admin_switch_match_to_solo', { user_id: match.user_a_id });
-        notice('Pair switched to solo while preserving payment status.', 'success');
         await refreshAdminData();
       } catch (error) {
         notice(error.message, 'danger');
       }
     });
 
-    actionsTd.append(resetBtn, soloBtn);
-    tr.append(pairTd, paymentTd, stepTd, actionsTd);
+    actions.append(resetBtn, soloBtn);
     ui.matchesBody.appendChild(tr);
   });
 }
@@ -184,24 +184,31 @@ function renderMatches(matches) {
 function renderMessages(messages) {
   ui.messagesFeed.textContent = '';
   if (!messages.length) {
-    const empty = document.createElement('div');
-    empty.className = 'text-secondary small';
-    empty.textContent = 'No messages sent yet.';
-    ui.messagesFeed.appendChild(empty);
+    ui.messagesFeed.innerHTML = '<div class="text-secondary small">No live messages.</div>';
     return;
   }
 
   messages.forEach((message) => {
     const row = document.createElement('div');
-    row.className = 'border rounded p-2';
+    row.className = 'border p-2';
     row.innerHTML = `
-      <div class="d-flex justify-content-between gap-2">
+      <div class="d-flex justify-content-between gap-2 mb-1">
         <strong>${message.recipient_scope}</strong>
         <small class="text-secondary">${new Date(message.created_at).toLocaleString()}</small>
       </div>
-      <div>${message.body}</div>
+      <div class="mb-1">${message.body}</div>
       <small class="text-secondary">Recipients: ${message.recipient_count}</small>
+      <div class="mt-2"><button class="btn btn-sm btn-outline-danger">Remove</button></div>
     `;
+    row.querySelector('button')?.addEventListener('click', async () => {
+      try {
+        await api('admin_delete_message', { message_id: message.id });
+        notice('Message removed.', 'warning');
+        await refreshAdminData();
+      } catch (error) {
+        notice(error.message, 'danger');
+      }
+    });
     ui.messagesFeed.appendChild(row);
   });
 }
@@ -209,13 +216,13 @@ function renderMessages(messages) {
 function renderLocations(locations) {
   ui.locationsBody.textContent = '';
   ensureMap();
-
   const seen = new Set();
+
   locations.forEach((location) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><div class="fw-semibold">${location.full_name}</div><small class="text-secondary">${location.phone}</small></td>
-      <td>${location.game_status}${location.is_enrolled ? '' : ' (unenrolled)'}</td>
+      <td>${location.game_status}</td>
       <td>${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}</td>
       <td>${location.location_updated_at ? new Date(location.location_updated_at).toLocaleTimeString() : '—'}</td>
     `;
@@ -223,14 +230,13 @@ function renderLocations(locations) {
 
     if (state.map) {
       seen.add(location.id);
-      const markerLabel = `${location.full_name} (${location.game_status})`;
+      const label = `${location.full_name} (${location.game_status})`;
       if (state.mapMarkers.has(location.id)) {
         const marker = state.mapMarkers.get(location.id);
         marker.setLatLng([location.latitude, location.longitude]);
-        marker.bindPopup(markerLabel);
+        marker.bindPopup(label);
       } else {
-        const marker = L.marker([location.latitude, location.longitude]).addTo(state.map).bindPopup(markerLabel);
-        state.mapMarkers.set(location.id, marker);
+        state.mapMarkers.set(location.id, L.marker([location.latitude, location.longitude]).addTo(state.map).bindPopup(label));
       }
     }
   });
@@ -243,43 +249,37 @@ function renderLocations(locations) {
   }
 
   if (!locations.length) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = '<td colspan="4" class="text-secondary">No live locations yet.</td>';
-    ui.locationsBody.appendChild(tr);
+    ui.locationsBody.innerHTML = '<tr><td colspan="4" class="text-secondary">No location updates yet.</td></tr>';
   }
 }
 
 function renderKillboard(killboard) {
-  const counts = killboard?.counts || { in: 0, eliminated: 0, out: 0 };
+  const counts = killboard?.counts || { in: 0, seeker: 0, eliminated: 0, withdrawn: 0 };
   const players = killboard?.players || [];
 
-  ui.killboardSummary.textContent = `In: ${counts.in} • Eliminated: ${counts.eliminated} • Out: ${counts.out}`;
+  ui.killboardSummary.textContent = `In: ${counts.in} • Seekers: ${counts.seeker} • Eliminated: ${counts.eliminated} • Withdrawn: ${counts.withdrawn}`;
+  ui.killboardCards.textContent = '';
   ui.killboardBody.textContent = '';
 
-  if (!players.length) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = '<td colspan="4" class="text-secondary">No players found.</td>';
-    ui.killboardBody.appendChild(tr);
-    return;
-  }
-
   players.forEach((player) => {
+    const card = document.createElement('div');
+    const className = player.status === 'in' ? 'kb-in' : player.status === 'eliminated' ? 'kb-eliminated' : player.status === 'seeker' ? 'kb-seeker' : 'kb-withdrawn';
+    card.className = `kb-card ${className}`;
+    card.innerHTML = `<div class="fw-semibold">${player.full_name}</div><div class="small">${player.status}</div>`;
+    ui.killboardCards.appendChild(card);
+
     const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><div class="fw-semibold">${player.full_name}</div><small class="text-secondary">#${player.id}</small></td>
+      <td>${player.mode || 'unset'}</td>
+      <td>${player.status}</td>
+      <td></td>
+    `;
 
-    const playerTd = document.createElement('td');
-    playerTd.innerHTML = `<div class="fw-semibold">${player.full_name}</div><small class="text-secondary">#${player.id}</small>`;
-
-    const modeTd = document.createElement('td');
-    modeTd.textContent = player.mode || 'unset';
-
-    const statusTd = document.createElement('td');
-    statusTd.textContent = player.status;
-
-    const actionsTd = document.createElement('td');
-    ['in', 'eliminated', 'out'].forEach((status) => {
+    const actions = tr.children[3];
+    ['in', 'seeker', 'eliminated', 'withdrawn'].forEach((status) => {
       const btn = document.createElement('button');
       btn.className = `btn btn-sm me-1 ${player.status === status ? 'btn-primary' : 'btn-outline-secondary'}`;
-      btn.type = 'button';
       btn.textContent = status;
       btn.disabled = player.status === status;
       btn.addEventListener('click', async () => {
@@ -290,21 +290,32 @@ function renderKillboard(killboard) {
           notice(error.message, 'danger');
         }
       });
-      actionsTd.appendChild(btn);
+      actions.appendChild(btn);
     });
 
-    tr.append(playerTd, modeTd, statusTd, actionsTd);
     ui.killboardBody.appendChild(tr);
   });
+
+  if (!players.length) {
+    ui.killboardCards.innerHTML = '<div class="text-secondary small">No players found.</div>';
+    ui.killboardBody.innerHTML = '<tr><td colspan="4" class="text-secondary">No players found.</td></tr>';
+  }
 }
 
 function renderIncidents(incidents) {
   ui.incidentsBody.textContent = '';
   if (!incidents.length) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = '<td colspan="6" class="text-secondary">No incidents reported.</td>';
-    ui.incidentsBody.appendChild(tr);
+    ui.incidentsBody.innerHTML = '<tr><td colspan="6" class="text-secondary">No incidents reported.</td></tr>';
+    ui.incidentBanner.classList.add('d-none');
     return;
+  }
+
+  const emergency = incidents.find((item) => item.status === 'open' && ['high', 'emergency'].includes(item.severity));
+  if (emergency) {
+    ui.incidentBanner.classList.remove('d-none');
+    ui.incidentBanner.textContent = `LIVE INCIDENT ALERT: ${emergency.reporter_name} reported ${emergency.incident_type} (${emergency.severity})`;
+  } else {
+    ui.incidentBanner.classList.add('d-none');
   }
 
   incidents.forEach((incident) => {
@@ -322,7 +333,6 @@ function renderIncidents(incidents) {
     ['open', 'acknowledged', 'resolved'].forEach((status) => {
       const btn = document.createElement('button');
       btn.className = `btn btn-sm me-1 ${incident.status === status ? 'btn-primary' : 'btn-outline-secondary'}`;
-      btn.type = 'button';
       btn.textContent = status;
       btn.disabled = incident.status === status;
       btn.addEventListener('click', async () => {
@@ -355,6 +365,9 @@ async function refreshAdminData() {
   state.admin = adminState.admin;
   ui.venmoLink.value = adminState.venmo_link || '';
   ui.gameStage.value = adminState.game_stage || 'pregame';
+  ui.clockMode.value = adminState.clock_mode || 'countdown';
+  ui.hideDurationSeconds.value = adminState.hide_duration_seconds ?? 300;
+  ui.seekDurationSeconds.value = adminState.seek_duration_seconds ?? 3600;
   ui.announcementText.value = adminState.announcement || '';
   ui.gameInfoText.value = adminState.game_info || '';
 
@@ -390,6 +403,10 @@ function stopPolling() {
 }
 
 function wire() {
+  document.querySelectorAll('[data-admin-tab]').forEach((btn) => {
+    btn.addEventListener('click', () => setTabs(btn.dataset.adminTab));
+  });
+
   ui.adminLoginForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
     try {
@@ -397,6 +414,7 @@ function wire() {
       const data = await api('admin_login', payload);
       state.admin = data.admin;
       setLayout();
+      setTabs('game');
       await refreshAdminData();
       startPolling();
       notice('Admin login successful.', 'success');
@@ -434,7 +452,29 @@ function wire() {
     try {
       const payload = Object.fromEntries(new FormData(ui.gameStateForm).entries());
       await api('admin_set_game_state', payload);
-      notice('Live game state updated.', 'success');
+      notice('Game state updated.', 'success');
+      await refreshAdminData();
+    } catch (error) {
+      notice(error.message, 'danger');
+    }
+  });
+
+  ui.startGameBtn?.addEventListener('click', async () => {
+    try {
+      await api('admin_start_game');
+      notice('Game started.', 'success');
+      await refreshAdminData();
+    } catch (error) {
+      notice(error.message, 'danger');
+    }
+  });
+
+  ui.resetGameBtn?.addEventListener('click', async () => {
+    const confirmReset = window.confirm('Reset game timer and clear withdrawn states?');
+    if (!confirmReset) return;
+    try {
+      await api('admin_reset_game');
+      notice('Game reset complete.', 'warning');
       await refreshAdminData();
     } catch (error) {
       notice(error.message, 'danger');
@@ -455,10 +495,14 @@ function wire() {
       notice(error.message, 'danger');
     }
   });
+
+  ui.adminMapFullscreenBtn?.addEventListener('click', () => toggleFullscreen(document.getElementById('liveMap')?.parentElement?.parentElement));
+  ui.adminKillboardFullscreenBtn?.addEventListener('click', () => toggleFullscreen(document.getElementById('killboardCards')?.parentElement));
 }
 
 async function init() {
   wire();
+  setTabs('game');
   setLayout();
   if (state.admin) {
     try {

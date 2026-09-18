@@ -21,6 +21,7 @@ $concentrationOptions = $registrationOptions['concentration_options'];
   <!-- Tabler UI CDN -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@latest/dist/css/tabler.min.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link href="/style.css" rel="stylesheet">
 </head>
 <body>
@@ -239,63 +240,77 @@ $concentrationOptions = $registrationOptions['concentration_options'];
                   </div>
                 </article>
 
-                <article id="completeStep" class="card d-none step-pane">
-                  <div class="card-body">
-                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-                      <h2 class="h3 text-success mb-0">Live Dashboard</h2>
-                      <button id="unenrollBtn" class="btn btn-outline-danger btn-sm" type="button">
-                        <i class="ti ti-user-x me-1"></i>Unenroll
-                      </button>
-                    </div>
-                    <p id="dashboardStatusLine" class="text-secondary mb-3">Loading game status…</p>
-
-                    <div class="row g-3 mb-3">
-                      <div class="col-12 col-lg-6">
-                        <div class="card">
-                          <div class="card-header"><h3 class="card-title mb-0">Announcement</h3></div>
-                          <div id="dashboardAnnouncement" class="card-body text-secondary">No announcement yet.</div>
-                        </div>
+                <article id="completeStep" class="d-none step-pane">
+                  <div id="userGameShell" class="game-shell">
+                    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+                      <div>
+                        <h2 class="h3 mb-1">Game Dashboard</h2>
+                        <div id="dashboardRoleLine" class="text-secondary small">You are a: hider</div>
+                        <div id="dashboardStatusLine" class="text-secondary small">Loading game status…</div>
                       </div>
-                      <div class="col-12 col-lg-6">
-                        <div class="card">
-                          <div class="card-header"><h3 class="card-title mb-0">Live Messages</h3></div>
-                          <div id="dashboardMessages" class="card-body vstack gap-2"></div>
-                        </div>
+                      <div class="d-flex gap-2">
+                        <button id="openIncidentModalBtn" class="btn btn-danger btn-sm" type="button"><i class="ti ti-alert-triangle me-1"></i>Report Incident</button>
+                        <button id="withdrawBtn" class="btn btn-outline-secondary btn-sm" type="button"><i class="ti ti-user-x me-1"></i>Withdraw</button>
                       </div>
                     </div>
 
-                    <div class="row g-3 mb-3">
-                      <div class="col-12 col-lg-6">
+                    <div class="row g-2 mb-3">
+                      <div class="col-6 col-md-3">
+                        <div class="stat-tile">
+                          <div class="stat-label">In</div>
+                          <div id="statInCount" class="stat-value">0</div>
+                        </div>
+                      </div>
+                      <div class="col-6 col-md-3">
+                        <div class="stat-tile">
+                          <div class="stat-label">Seekers</div>
+                          <div id="statSeekerCount" class="stat-value">0</div>
+                        </div>
+                      </div>
+                      <div class="col-6 col-md-3">
+                        <div class="stat-tile">
+                          <div class="stat-label">Eliminated</div>
+                          <div id="statEliminatedCount" class="stat-value">0</div>
+                        </div>
+                      </div>
+                      <div class="col-6 col-md-3">
+                        <div class="stat-tile">
+                          <div class="stat-label">Game Clock</div>
+                          <div id="gameClockValue" class="stat-value">00:00</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div id="persistentMessageAlerts" class="vstack gap-2 mb-3"></div>
+
+                    <div class="card mb-3">
+                      <div class="card-header"><h3 class="card-title mb-0">Current Duo</h3></div>
+                      <div id="duoInfoPanel" class="card-body text-secondary">No duo info available.</div>
+                    </div>
+
+                    <div class="row g-3">
+                      <div class="col-12 col-xl-5">
                         <div class="card">
-                          <div class="card-header"><h3 class="card-title mb-0">Report Incident</h3></div>
+                          <div class="card-header d-flex justify-content-between align-items-center">
+                            <h3 class="card-title mb-0">Your Duo Map</h3>
+                            <button id="userMapFullscreenBtn" class="btn btn-sm btn-outline-secondary" type="button"><i class="ti ti-arrows-maximize"></i></button>
+                          </div>
                           <div class="card-body">
-                            <form id="incidentForm" class="vstack gap-2">
-                              <input class="form-control" type="text" name="incident_type" placeholder="Incident type (UPD, medical, etc.)" required>
-                              <select class="form-select" name="severity" required>
-                                <option value="low">Low</option>
-                                <option value="medium">Medium</option>
-                                <option value="high">High</option>
-                                <option value="emergency">Emergency</option>
-                              </select>
-                              <textarea class="form-control" name="details" rows="3" placeholder="What happened?" required></textarea>
-                              <button class="btn btn-primary" type="submit">Send Incident Report</button>
-                            </form>
+                            <div id="userMap" class="user-map"></div>
                           </div>
                         </div>
                       </div>
-                      <div class="col-12 col-lg-6">
+                      <div class="col-12 col-xl-7">
                         <div class="card">
-                          <div class="card-header"><h3 class="card-title mb-0">Your Incident Reports</h3></div>
-                          <div id="dashboardIncidents" class="card-body vstack gap-2"></div>
+                          <div class="card-header d-flex justify-content-between align-items-center">
+                            <h3 class="card-title mb-0">Live Kill Board</h3>
+                            <button id="userKillboardFullscreenBtn" class="btn btn-sm btn-outline-secondary" type="button"><i class="ti ti-arrows-maximize"></i></button>
+                          </div>
+                          <div class="card-body">
+                            <div id="killboardSummary" class="text-secondary mb-2"></div>
+                            <div id="killboardCards" class="killboard-grid"></div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-
-                    <div class="card">
-                      <div class="card-header"><h3 class="card-title mb-0">Live Kill Board</h3></div>
-                      <div class="card-body">
-                        <div id="killboardSummary" class="text-secondary mb-2"></div>
-                        <div id="killboardCards" class="row g-2"></div>
                       </div>
                     </div>
                   </div>
@@ -308,6 +323,29 @@ $concentrationOptions = $registrationOptions['concentration_options'];
     </div>
   </div>
 
+  <div class="modal fade" id="incidentModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Report Incident</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form id="incidentForm" class="vstack gap-2">
+            <input class="form-control" type="text" name="incident_type" placeholder="Incident type (UPD, medical, etc.)" required>
+            <select class="form-select" name="severity" required>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="emergency">Emergency</option>
+            </select>
+            <textarea class="form-control" name="details" rows="3" placeholder="What happened?" required></textarea>
+            <button class="btn btn-danger" type="submit">Send Incident Report</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
   <script>
     window.__BOOT_USER__ = <?php echo json_encode(
       $user ? userPublic($user) : null,
@@ -315,6 +353,7 @@ $concentrationOptions = $registrationOptions['concentration_options'];
     ); ?>;
   </script>
   <script src="https://cdn.jsdelivr.net/npm/@tabler/core@latest/dist/js/tabler.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

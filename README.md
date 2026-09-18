@@ -77,8 +77,10 @@ Payment flow:
 - Registration completes only after approval (for duos, both users must be approved)
 
 Live gameplay operations:
-- User complete step is now a live dashboard with show info, announcements, inbox messages, incident reporting, and live kill board cards
-- Users can unenroll themselves; if they were in a duo, their teammate is switched to solo and receives a required acknowledge alert
-- Admins can control live game stage/announcement/show-info and send targeted live messages (everyone, active, eliminated, single user, duo, or custom group)
-- When game stage is `live`, user devices request geolocation and post updates for the admin live map
-- Admins can review and update incident statuses and manage kill-board in/out/eliminated status live
+- User complete step is a fullscreen-oriented live dashboard with duo info, persistent admin alerts, map, and kill board cards
+- Player statuses are `in`, `eliminated`, `seeker`, and `withdrawn`
+- Users can withdraw from the game; if they were in a duo, their teammate is switched to solo and receives an acknowledge alert
+- Admins can control stage, clock mode (count up/down), hide duration, seek duration, start/reset game, and persistent live messages
+- Admin dashboard is tabbed and includes dark-mode live map, fullscreen map/kill-board controls, incidents, and operations tabs
+- When game stage is `live`, user devices post geolocation updates at ~60-second intervals for the admin map
+- Incident reports are submitted via user modal and trigger a live emergency banner on admin when open high/emergency incidents exist

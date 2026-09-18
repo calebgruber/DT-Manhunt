@@ -104,29 +104,37 @@ function killboardData(PDO $pdo): array
         "SELECT id, full_name, mode, is_enrolled, game_status
          FROM users
          ORDER BY
-            CASE WHEN is_enrolled = 1 AND game_status = 'in' THEN 0
-                 WHEN is_enrolled = 1 AND game_status = 'eliminated' THEN 1
-                 ELSE 2 END,
+            CASE WHEN game_status = 'in' THEN 0
+                 WHEN game_status = 'seeker' THEN 1
+                 WHEN game_status = 'eliminated' THEN 2
+                 ELSE 3 END,
             lower(full_name) ASC"
     );
     $rows = $stmt->fetchAll();
 
     $counts = [
         'in' => 0,
+        'seeker' => 0,
         'eliminated' => 0,
-        'out' => 0,
+        'withdrawn' => 0,
     ];
 
     $players = [];
     foreach ($rows as $row) {
         $isEnrolled = (int) ($row['is_enrolled'] ?? 1) === 1;
         $status = (string) ($row['game_status'] ?? 'in');
-        if (!$isEnrolled || $status === 'out') {
-            $status = 'out';
-        } elseif ($status !== 'eliminated') {
+        if ($status === 'out') {
+            $status = 'withdrawn';
+        }
+        if (!$isEnrolled || $status === 'withdrawn') {
+            $status = 'withdrawn';
+        } elseif (!in_array($status, ['in', 'seeker', 'eliminated'], true)) {
             $status = 'in';
         }
 
+        if (!array_key_exists($status, $counts)) {
+            $status = 'in';
+        }
         $counts[$status] += 1;
         $players[] = [
             'id' => (int) $row['id'],
@@ -150,12 +158,12 @@ function resolveRecipients(PDO $pdo, string $target, ?int $userId, array $groupI
     }
 
     if ($target === 'active') {
-        $stmt = $pdo->query("SELECT id FROM users WHERE is_enrolled = 1 AND game_status = 'in'");
+        $stmt = $pdo->query("SELECT id FROM users WHERE is_enrolled = 1 AND game_status IN ('in', 'seeker')");
         return array_map(static fn (array $row): int => (int) $row['id'], $stmt->fetchAll());
     }
 
     if ($target === 'eliminated') {
-        $stmt = $pdo->query("SELECT id FROM users WHERE game_status = 'eliminated' OR is_enrolled = 0");
+        $stmt = $pdo->query("SELECT id FROM users WHERE game_status IN ('eliminated', 'withdrawn') OR is_enrolled = 0");
         return array_map(static fn (array $row): int => (int) $row['id'], $stmt->fetchAll());
     }
 
@@ -189,6 +197,61 @@ function resolveRecipients(PDO $pdo, string $target, ?int $userId, array $groupI
     return [];
 }
 
+function gameClockData(): array
+{
+    $stage = gameStage();
+    $startedAt = trim(appSetting('game_started_at', ''));
+    $hideSeconds = max(0, (int) appSetting('hide_duration_seconds', '300'));
+    $seekSeconds = max(0, (int) appSetting('seek_duration_seconds', '3600'));
+    $clockMode = strtolower(trim(appSetting('clock_mode', 'countdown')));
+    if (!in_array($clockMode, ['countdown', 'countup'], true)) {
+        $clockMode = 'countdown';
+    }
+
+    $phase = 'idle';
+    $seconds = $clockMode === 'countup' ? 0 : $seekSeconds;
+    $direction = $clockMode === 'countup' ? 'up' : 'down';
+    $running = false;
+
+    if ($startedAt !== '') {
+        $startedTs = strtotime($startedAt);
+        if ($startedTs !== false) {
+            $elapsed = max(0, time() - $startedTs);
+            $running = $stage === 'live';
+            if ($elapsed < $hideSeconds) {
+                $phase = 'hide';
+                $seconds = $hideSeconds - $elapsed;
+                $direction = 'down';
+            } else {
+                $phase = 'seek';
+                $seekElapsed = $elapsed - $hideSeconds;
+                if ($clockMode === 'countdown') {
+                    $seconds = max(0, $seekSeconds - $seekElapsed);
+                    $direction = 'down';
+                    if ($seconds === 0) {
+                        $phase = 'ended';
+                    }
+                } else {
+                    $seconds = $seekElapsed;
+                    $direction = 'up';
+                }
+            }
+        }
+    }
+
+    return [
+        'stage' => $stage,
+        'phase' => $phase,
+        'seconds' => $seconds,
+        'direction' => $direction,
+        'running' => $running,
+        'clock_mode' => $clockMode,
+        'hide_duration_seconds' => $hideSeconds,
+        'seek_duration_seconds' => $seekSeconds,
+        'started_at' => $startedAt,
+    ];
+}
+
 function dashboardPayload(PDO $pdo, array $user): array
 {
     $uid = (int) $user['id'];
@@ -217,19 +280,52 @@ function dashboardPayload(PDO $pdo, array $user): array
         'created_at' => (string) $row['created_at'],
     ], $incStmt->fetchAll());
 
+    $teammate = teammateFor($user['teammate_user_id'] ? (int) $user['teammate_user_id'] : null);
+    $selfLocation = [
+        'latitude' => $user['latitude'] === null ? null : (float) $user['latitude'],
+        'longitude' => $user['longitude'] === null ? null : (float) $user['longitude'],
+        'updated_at' => $user['location_updated_at'] ? (string) $user['location_updated_at'] : null,
+    ];
+    $teammateLocation = null;
+    if ($teammate) {
+        $mateRow = findUser($pdo, (int) $teammate['id']);
+        if ($mateRow) {
+            $teammateLocation = [
+                'latitude' => $mateRow['latitude'] === null ? null : (float) $mateRow['latitude'],
+                'longitude' => $mateRow['longitude'] === null ? null : (float) $mateRow['longitude'],
+                'updated_at' => $mateRow['location_updated_at'] ? (string) $mateRow['location_updated_at'] : null,
+            ];
+        }
+    }
+
+    $killboard = killboardData($pdo);
+    $clock = gameClockData();
+
     return [
         'game_stage' => gameStage(),
         'announcement' => gameAnnouncement(),
         'game_info' => trim(appSetting('game_info', '')),
         'inbox' => $inbox,
         'unread_messages' => $unread,
+        'active_alerts' => $inbox,
         'incidents' => $incidents,
-        'killboard' => killboardData($pdo),
+        'killboard' => $killboard,
+        'stats' => $killboard['counts'],
+        'clock' => $clock,
+        'duo' => [
+            'teammate' => $teammate,
+            'self_location' => $selfLocation,
+            'teammate_location' => $teammateLocation,
+        ],
+        'role' => (string) ($user['game_status'] ?? 'in') === 'seeker' ? 'seeker' : 'hider',
     ];
 }
 
 $input = body();
 $action = (string) ($input['action'] ?? $_GET['action'] ?? '');
+if ($action === 'withdraw_game') {
+    $action = 'unenroll';
+}
 $pdo = db();
 $registrationOptions = registrationOptions();
 $allowedYears = $registrationOptions['graduation_year_options'];
@@ -363,6 +459,7 @@ try {
 
     if ($action === 'admin_state') {
         $admin = requireAdmin();
+        $clock = gameClockData();
         respond(true, [
             'admin' => adminPublic($admin),
             'venmo_link' => venmoLink(),
@@ -370,6 +467,10 @@ try {
             'announcement' => gameAnnouncement(),
             'game_info' => trim(appSetting('game_info', '')),
             'killboard' => killboardData($pdo),
+            'clock' => $clock,
+            'clock_mode' => $clock['clock_mode'],
+            'hide_duration_seconds' => $clock['hide_duration_seconds'],
+            'seek_duration_seconds' => $clock['seek_duration_seconds'],
         ]);
     }
 
@@ -416,7 +517,7 @@ try {
             $unenroll = $pdo->prepare(
                 "UPDATE users
                  SET is_enrolled = 0,
-                     game_status = 'out',
+                     game_status = 'withdrawn',
                      teammate_user_id = NULL,
                      mode = CASE WHEN mode IS NULL THEN 'solo' ELSE mode END,
                      pending_alert = '',
@@ -468,6 +569,7 @@ try {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
+
             respond(false, ['message' => $e->getMessage()], 409);
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) {
@@ -923,17 +1025,58 @@ try {
         $stage = strtolower(trim((string) ($input['game_stage'] ?? gameStage())));
         $announcement = trim((string) ($input['announcement'] ?? gameAnnouncement()));
         $gameInfo = trim((string) ($input['game_info'] ?? trim(appSetting('game_info', ''))));
+        $hideDuration = max(0, (int) ($input['hide_duration_seconds'] ?? (int) appSetting('hide_duration_seconds', '300')));
+        $seekDuration = max(0, (int) ($input['seek_duration_seconds'] ?? (int) appSetting('seek_duration_seconds', '3600')));
+        $clockMode = strtolower(trim((string) ($input['clock_mode'] ?? appSetting('clock_mode', 'countdown'))));
         if (!in_array($stage, ['pregame', 'live', 'paused', 'ended'], true)) {
             respond(false, ['message' => 'Invalid game stage.'], 422);
+        }
+        if (!in_array($clockMode, ['countdown', 'countup'], true)) {
+            respond(false, ['message' => 'Clock mode must be countdown or countup.'], 422);
         }
         saveAppSetting('game_stage', $stage);
         saveAppSetting('announcement', $announcement);
         saveAppSetting('game_info', $gameInfo);
+        saveAppSetting('hide_duration_seconds', (string) $hideDuration);
+        saveAppSetting('seek_duration_seconds', (string) $seekDuration);
+        saveAppSetting('clock_mode', $clockMode);
         respond(true, [
             'game_stage' => gameStage(),
             'announcement' => gameAnnouncement(),
             'game_info' => trim(appSetting('game_info', '')),
+            'clock' => gameClockData(),
         ]);
+    }
+
+    if ($action === 'admin_start_game') {
+        requireAdmin();
+        saveAppSetting('game_stage', 'live');
+        saveAppSetting('game_started_at', nowUtc());
+        respond(true, ['clock' => gameClockData()]);
+    }
+
+    if ($action === 'admin_reset_game') {
+        requireAdmin();
+        $pdo->beginTransaction();
+        try {
+            saveAppSetting('game_stage', 'pregame');
+            saveAppSetting('game_started_at', '');
+            $reset = $pdo->prepare(
+                "UPDATE users
+                 SET game_status = CASE WHEN game_status = 'withdrawn' THEN 'in' ELSE game_status END,
+                     is_enrolled = CASE WHEN is_enrolled = 0 THEN 1 ELSE is_enrolled END,
+                     pending_alert = '',
+                     updated_at = :updated_at"
+            );
+            $reset->execute(['updated_at' => nowUtc()]);
+            $pdo->commit();
+            respond(true, ['clock' => gameClockData()]);
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
     }
 
     if ($action === 'admin_send_message') {
@@ -1020,6 +1163,17 @@ try {
         respond(true, ['messages' => $messages]);
     }
 
+    if ($action === 'admin_delete_message') {
+        requireAdmin();
+        $messageId = (int) ($input['message_id'] ?? 0);
+        if ($messageId <= 0) {
+            respond(false, ['message' => 'Invalid message.'], 422);
+        }
+        $stmt = $pdo->prepare('DELETE FROM messages WHERE id = :id');
+        $stmt->execute(['id' => $messageId]);
+        respond(true);
+    }
+
     if ($action === 'admin_list_locations') {
         requireAdmin();
         $stmt = $pdo->query(
@@ -1097,11 +1251,11 @@ try {
         if ($userId <= 0) {
             respond(false, ['message' => 'Invalid user.'], 422);
         }
-        if (!in_array($status, ['in', 'eliminated', 'out'], true)) {
-            respond(false, ['message' => 'Status must be in, eliminated, or out.'], 422);
+        if (!in_array($status, ['in', 'eliminated', 'seeker', 'withdrawn'], true)) {
+            respond(false, ['message' => 'Status must be in, eliminated, seeker, or withdrawn.'], 422);
         }
 
-        $isEnrolled = $status === 'out' ? 0 : 1;
+        $isEnrolled = $status === 'withdrawn' ? 0 : 1;
         $stmt = $pdo->prepare('UPDATE users SET game_status = :game_status, is_enrolled = :is_enrolled, updated_at = :updated_at WHERE id = :id');
         $stmt->execute([
             'game_status' => $status,
