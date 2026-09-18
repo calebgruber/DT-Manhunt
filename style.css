@@ -1,0 +1,69 @@
+body {
+  min-height: 100vh;
+}
+
+.app-shell {
+  max-width: 720px;
+}
+
+.stepper {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.5rem;
+}
+
+.step {
+  background: #1d1f23;
+  border: 1px solid #3a3f46;
+  border-radius: 0.75rem;
+  padding: 0.5rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.8rem;
+}
+
+.step span {
+  width: 1.5rem;
+  height: 1.5rem;
+  margin: 0 auto;
+  border-radius: 999px;
+  border: 1px solid #6c757d;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+.step.active {
+  border-color: #0d6efd;
+  background: #0b264f;
+}
+
+.step.active span {
+  border-color: #0d6efd;
+  background: #0d6efd;
+  color: #fff;
+}
+
+.step-card {
+  margin-bottom: 1rem;
+}
+
+.mode-btn {
+  font-size: 1.05rem;
+  border-width: 2px;
+}
+
+@media (max-width: 576px) {
+  .stepper {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .mode-btn {
+    min-height: 120px;
+  }
+}
