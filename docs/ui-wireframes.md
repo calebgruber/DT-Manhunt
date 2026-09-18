@@ -1,5 +1,7 @@
 # Bootstrap 5 UI Wireframes (Spec)
 
+DB: voxelnodes_manhunt
+DB PW: t9K-ejDhnn0p(p%2
 ## Player Experience
 
 ## A) Login Screen
