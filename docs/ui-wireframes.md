@@ -1,4 +1,4 @@
-# Bootstrap 5 UI Wireframes (Spec)
+# Tabler UI Wireframes (Spec)
 
 Current scaffold uses local SQLite (`manhunt.sqlite`); production DB credentials (for MySQL deployment) must stay in secure config and never be committed.
 ## Player Experience
@@ -93,7 +93,7 @@ Additional cards:
 - system event feed (audit trail style)
 
 ## Visual System
-- Bootstrap 5 components: cards, badges, alerts, toasts, offcanvas
+- Tabler components: cards, badges, alerts, toasts, offcanvas
 - Dark mode friendly palette
 - high-contrast status colors:
   - alive = success

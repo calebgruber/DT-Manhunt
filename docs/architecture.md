@@ -2,7 +2,7 @@
 
 ## 1) Core Stack
 
-### cPanel Web App (PHP + SQLite scaffold / MySQL target + Bootstrap 5)
+### cPanel Web App (PHP + SQLite scaffold / MySQL target + Tabler UI)
 Responsibilities:
 - registration (individual/duo)
 - login (phone + PIN)

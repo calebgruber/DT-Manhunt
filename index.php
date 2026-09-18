@@ -10,177 +10,208 @@ $appName = (string) ($config['app']['name'] ?? 'DT Manhunt');
 $orgName = (string) ($config['app']['organization'] ?? 'SUNY Purchase');
 ?>
 <!doctype html>
-<html lang="en">
+<html lang="en" data-bs-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title><?php echo htmlspecialchars($appName, ENT_QUOTES, 'UTF-8'); ?></title>
   <!-- Tabler UI CDN -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/css/tabler.min.css" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.38.0/dist/tabler-icons.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@latest/dist/css/tabler.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" />
   <link href="/style.css" rel="stylesheet">
 </head>
-<body class="dark-ui">
-  <main class="container py-3 py-lg-4 app-container">
-    <header class="d-flex justify-content-between align-items-center page-header mb-3 mb-lg-4">
-      <div>
-        <span class="eyebrow"><?php echo htmlspecialchars($orgName, ENT_QUOTES, 'UTF-8'); ?></span>
-        <h1 class="h4 m-0">Manhunt Registration</h1>
+<body>
+  <div class="page">
+    <header class="navbar navbar-expand-md d-print-none">
+      <div class="container-xl">
+        <div class="navbar-brand pe-0">
+          <span class="avatar avatar-sm me-2 bg-primary text-primary-fg"><i class="ti ti-target-arrow"></i></span>
+          <div>
+            <div class="text-uppercase text-secondary small fw-bold"><?php echo htmlspecialchars($orgName, ENT_QUOTES, 'UTF-8'); ?></div>
+            <div class="fw-semibold">Manhunt Registration</div>
+          </div>
+        </div>
+        <div class="navbar-nav flex-row order-md-last">
+          <button id="logoutBtn" class="btn btn-outline-secondary d-none" type="button">
+            <i class="ti ti-logout me-1"></i>Logout
+          </button>
+        </div>
       </div>
-      <button id="logoutBtn" class="btn btn-outline-light btn-sm d-none" type="button">Logout</button>
     </header>
 
-    <div id="toastContainer" class="toast-container position-fixed bottom-0 end-0 p-3"></div>
+    <div class="page-wrapper">
+      <div class="page-body">
+        <div class="container-xl app-container">
+          <div id="toastContainer" class="toast-container position-fixed bottom-0 end-0 p-3"></div>
 
-    <section id="authSection" class="card shell-card border-0 shadow-sm">
-      <div class="card-body p-3 p-lg-4">
-        <div class="auth-grid">
-          <aside class="brand-panel d-none d-lg-flex">
-            <div>
-              <span class="badge text-bg-primary mb-3">Tabler UI + Dark Mode</span>
-              <h2 class="h4">Join the campus game</h2>
-              <p class="text-muted mb-0">Desktop shows side-by-side panels. Mobile keeps a stacked, touch-first flow.</p>
-            </div>
-          </aside>
-
-          <section>
-            <ul class="nav nav-pills nav-fill mb-3" role="tablist" aria-label="Authentication tabs">
-              <li class="nav-item"><button class="nav-link active" data-auth-tab="login" type="button" aria-controls="loginPanel" aria-selected="true">Login</button></li>
-              <li class="nav-item"><button class="nav-link" data-auth-tab="register" type="button" aria-controls="registerPanel" aria-selected="false">Register</button></li>
-            </ul>
-
-            <div id="loginPanel" role="tabpanel">
-              <h2 class="h6 mb-2">Welcome back</h2>
-              <p class="small text-muted mb-3">Use your phone and PIN to continue from your saved step.</p>
-              <form id="loginForm" class="vstack gap-2">
-                <label class="visually-hidden" for="loginPhone">Phone number</label>
-                <input id="loginPhone" class="form-control form-control-lg" name="phone" placeholder="Phone number" type="tel" autocomplete="tel" required>
-                <label class="visually-hidden" for="loginPin">PIN</label>
-                <input id="loginPin" class="form-control form-control-lg" name="pin" placeholder="PIN" inputmode="numeric" pattern="[0-9]{4,8}" autocomplete="current-password" type="password" required>
-                <button class="btn btn-primary btn-lg" type="submit">Sign In</button>
-              </form>
-            </div>
-
-            <div id="registerPanel" class="d-none" role="tabpanel">
-              <h2 class="h6 mb-2">Create account</h2>
-              <p class="small text-muted mb-3">Use your real first and last name for matching.</p>
-              <form id="registerForm" class="vstack gap-2">
-                <div class="row g-2">
-                  <div class="col-6">
-                    <label class="visually-hidden" for="registerFirstName">First name</label>
-                    <input id="registerFirstName" class="form-control form-control-lg" name="first_name" placeholder="First name" autocomplete="given-name" required>
-                  </div>
-                  <div class="col-6">
-                    <label class="visually-hidden" for="registerLastName">Last name</label>
-                    <input id="registerLastName" class="form-control form-control-lg" name="last_name" placeholder="Last name" autocomplete="family-name" required>
+          <section id="authSection">
+            <div class="row g-3">
+              <div class="col-lg-5 d-none d-lg-block">
+                <div class="card">
+                  <div class="card-body">
+                    <div class="badge bg-azure-lt text-azure mb-3">Tabler UI</div>
+                    <h2 class="h2 mb-2">Join the game</h2>
+                    <p class="text-secondary mb-0">Clean desktop layout and touch-friendly mobile flow with one shared registration system.</p>
                   </div>
                 </div>
-                <label class="visually-hidden" for="registerPhone">Phone number</label>
-                <input id="registerPhone" class="form-control form-control-lg" name="phone" placeholder="Phone number" type="tel" autocomplete="tel" required>
-                <label class="visually-hidden" for="registerPin">PIN (4-8 digits)</label>
-                <input id="registerPin" class="form-control form-control-lg" name="pin" placeholder="PIN (4-8 digits)" inputmode="numeric" pattern="[0-9]{4,8}" autocomplete="new-password" type="password" required>
-                <div class="row g-2">
-                  <div class="col-6">
-                    <label class="visually-hidden" for="registerGradYear">Graduation year</label>
-                    <input id="registerGradYear" class="form-control form-control-lg" name="graduation_year" placeholder="Graduation year" inputmode="numeric" pattern="[0-9]{4}" autocomplete="off" required>
-                  </div>
-                  <div class="col-6">
-                    <label class="visually-hidden" for="registerConcentration">Concentration</label>
-                    <input id="registerConcentration" class="form-control form-control-lg" name="concentration" placeholder="Concentration" autocomplete="organization-title" required>
+              </div>
+
+              <div class="col-12 col-lg-7">
+                <div class="card">
+                  <div class="card-body">
+                    <ul class="nav nav-tabs mb-4" role="tablist" aria-label="Authentication tabs">
+                      <li class="nav-item" role="presentation">
+                        <button class="nav-link active" data-auth-tab="login" type="button" aria-controls="loginPanel" aria-selected="true">Login</button>
+                      </li>
+                      <li class="nav-item" role="presentation">
+                        <button class="nav-link" data-auth-tab="register" type="button" aria-controls="registerPanel" aria-selected="false">Register</button>
+                      </li>
+                    </ul>
+
+                    <div id="loginPanel" role="tabpanel">
+                      <h3 class="h4 mb-2">Welcome back</h3>
+                      <p class="text-secondary mb-3">Use your phone and PIN to continue your saved progress.</p>
+                      <form id="loginForm" class="vstack gap-3">
+                        <div>
+                          <label class="form-label" for="loginPhone">Phone number</label>
+                          <input id="loginPhone" class="form-control form-control-lg" name="phone" placeholder="Phone number" type="tel" autocomplete="tel" required>
+                        </div>
+                        <div>
+                          <label class="form-label" for="loginPin">PIN</label>
+                          <input id="loginPin" class="form-control form-control-lg" name="pin" placeholder="4-8 digit PIN" inputmode="numeric" pattern="[0-9]{4,8}" autocomplete="current-password" type="password" required>
+                        </div>
+                        <button class="btn btn-primary btn-lg w-100" type="submit">Sign In</button>
+                      </form>
+                    </div>
+
+                    <div id="registerPanel" class="d-none" role="tabpanel">
+                      <h3 class="h4 mb-2">Create account</h3>
+                      <p class="text-secondary mb-3">Use your real first and last name for teammate matching.</p>
+                      <form id="registerForm" class="vstack gap-3">
+                        <div class="row g-3">
+                          <div class="col-12 col-sm-6">
+                            <label class="form-label" for="registerFirstName">First name</label>
+                            <input id="registerFirstName" class="form-control form-control-lg" name="first_name" placeholder="First name" autocomplete="given-name" required>
+                          </div>
+                          <div class="col-12 col-sm-6">
+                            <label class="form-label" for="registerLastName">Last name</label>
+                            <input id="registerLastName" class="form-control form-control-lg" name="last_name" placeholder="Last name" autocomplete="family-name" required>
+                          </div>
+                          <div class="col-12">
+                            <label class="form-label" for="registerPhone">Phone number</label>
+                            <input id="registerPhone" class="form-control form-control-lg" name="phone" placeholder="Phone number" type="tel" autocomplete="tel" required>
+                          </div>
+                          <div class="col-12 col-sm-6">
+                            <label class="form-label" for="registerPin">PIN (4-8 digits)</label>
+                            <input id="registerPin" class="form-control form-control-lg" name="pin" placeholder="PIN" inputmode="numeric" pattern="[0-9]{4,8}" autocomplete="new-password" type="password" required>
+                          </div>
+                          <div class="col-12 col-sm-6">
+                            <label class="form-label" for="registerGradYear">Graduation year</label>
+                            <input id="registerGradYear" class="form-control form-control-lg" name="graduation_year" placeholder="2027" inputmode="numeric" pattern="[0-9]{4}" autocomplete="off" required>
+                          </div>
+                          <div class="col-12">
+                            <label class="form-label" for="registerConcentration">Concentration</label>
+                            <input id="registerConcentration" class="form-control form-control-lg" name="concentration" placeholder="Concentration" autocomplete="organization-title" required>
+                          </div>
+                        </div>
+                        <button class="btn btn-success btn-lg w-100" type="submit">Create Account</button>
+                      </form>
+                    </div>
                   </div>
                 </div>
-                <button class="btn btn-success btn-lg" type="submit">Create Account</button>
-              </form>
+              </div>
+            </div>
+          </section>
+
+          <section id="appSection" class="d-none">
+            <div class="row g-3">
+              <div class="col-12 col-xl-4">
+                <div id="stepperCard" class="card sticky-panel">
+                  <div class="card-body">
+                    <div id="stepper" class="stepper"></div>
+                  </div>
+                </div>
+                <div id="resumeCard" class="alert alert-info d-none mt-3 mb-0"></div>
+              </div>
+
+              <div class="col-12 col-xl-8">
+                <article id="profileStep" class="card d-none step-pane">
+                  <div class="card-body">
+                    <h2 class="h3 mb-2">Profile complete</h2>
+                    <p id="profileSummary" class="text-secondary mb-4"></p>
+                    <button id="continueToMode" class="btn btn-primary btn-lg w-100">Continue to mode</button>
+                  </div>
+                </article>
+
+                <article id="modeStep" class="card d-none step-pane">
+                  <div class="card-body">
+                    <h2 class="h3 mb-2">Choose your mode</h2>
+                    <p class="text-secondary mb-3">Pick solo or duo to continue.</p>
+                    <div class="row g-3">
+                      <div class="col-12 col-md-6">
+                        <button class="btn btn-outline-secondary mode-btn w-100" data-mode="solo" type="button">
+                          <i class="ti ti-user fs-1"></i>
+                          <span>Solo</span>
+                        </button>
+                      </div>
+                      <div class="col-12 col-md-6">
+                        <button class="btn btn-outline-primary mode-btn w-100" data-mode="duo" type="button">
+                          <i class="ti ti-users fs-1"></i>
+                          <span>Duo</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+
+                <article id="matchmakingStep" class="card d-none step-pane">
+                  <div class="card-body">
+                    <h2 class="h3 mb-2">Find teammate</h2>
+                    <p class="text-secondary mb-3">Search by first and last name, then send an invite.</p>
+                    <div class="row g-3">
+                      <div class="col-12 col-lg-7">
+                        <div class="input-group mb-2">
+                          <label class="visually-hidden" for="searchInput">Search full name</label>
+                          <input id="searchInput" class="form-control form-control-lg" placeholder="Search full name" autocomplete="off">
+                          <button id="searchBtn" class="btn btn-primary" type="button">Search</button>
+                        </div>
+                        <div id="searchResults" class="list-group"></div>
+                        <div class="mt-3">
+                          <h3 class="h5 mb-1">Your invite</h3>
+                          <p id="outgoingInvite" class="text-secondary mb-0">No outgoing invite.</p>
+                        </div>
+                      </div>
+                      <div class="col-12 col-lg-5">
+                        <h3 class="h5 mb-2">Incoming invites</h3>
+                        <div id="incomingInvites" class="vstack gap-2 mb-3"></div>
+                        <div id="teammateCard" class="alert alert-success d-none mb-0"></div>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+
+                <article id="paymentStep" class="card d-none step-pane">
+                  <div class="card-body">
+                    <h2 class="h3 mb-2">Payment</h2>
+                    <p class="text-secondary mb-3">Complete payment to finish registration.</p>
+                    <div id="paymentInfo" class="mb-4"></div>
+                    <button id="completePaymentBtn" class="btn btn-success btn-lg w-100" type="button">Mark Payment Complete</button>
+                  </div>
+                </article>
+
+                <article id="completeStep" class="card d-none step-pane">
+                  <div class="card-body">
+                    <h2 class="h3 text-success mb-2">You are registered</h2>
+                    <p class="text-secondary mb-0">You can log in and out anytime, and your progress stays saved.</p>
+                  </div>
+                </article>
+              </div>
             </div>
           </section>
         </div>
       </div>
-    </section>
-
-    <section id="appSection" class="d-none">
-      <div class="app-grid">
-        <aside class="left-rail">
-          <div id="stepperCard" class="card shell-card border-0 shadow-sm mb-3">
-            <div class="card-body">
-              <div id="stepper" class="stepper"></div>
-            </div>
-          </div>
-          <div id="resumeCard" class="alert alert-info d-none mb-3"></div>
-        </aside>
-
-        <section class="flow-area">
-          <article id="profileStep" class="card shell-card border-0 shadow-sm d-none step-pane">
-            <div class="card-body">
-              <h2 class="h5">Profile complete</h2>
-              <p id="profileSummary" class="small text-muted mb-3"></p>
-              <button id="continueToMode" class="btn btn-primary btn-lg w-100">Continue to mode</button>
-            </div>
-          </article>
-
-          <article id="modeStep" class="card shell-card border-0 shadow-sm d-none step-pane">
-            <div class="card-body">
-              <h2 class="h5">Choose your mode</h2>
-              <p class="small text-muted">Choose once to continue.</p>
-              <div class="row g-2">
-                <div class="col-12 col-md-6">
-                  <button class="btn btn-outline-light mode-btn w-100" data-mode="solo" type="button">
-                    <i class="ti ti-user d-block fs-2"></i>
-                    <span>Solo</span>
-                  </button>
-                </div>
-                <div class="col-12 col-md-6">
-                  <button class="btn btn-outline-info mode-btn w-100" data-mode="duo" type="button">
-                    <i class="ti ti-users d-block fs-2"></i>
-                    <span>Duo</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </article>
-
-          <article id="matchmakingStep" class="card shell-card border-0 shadow-sm d-none step-pane">
-            <div class="card-body">
-              <h2 class="h5">Find teammate</h2>
-              <p class="small text-muted">Search by first and last name.</p>
-              <div class="match-grid">
-                <div>
-                  <div class="input-group mb-2">
-                    <label class="visually-hidden" for="searchInput">Search full name</label>
-                    <input id="searchInput" class="form-control form-control-lg" placeholder="Search full name" autocomplete="off">
-                    <button id="searchBtn" class="btn btn-primary" type="button">Search</button>
-                  </div>
-                  <div id="searchResults" class="list-group mb-3"></div>
-                  <h3 class="h6">Your invite</h3>
-                  <div id="outgoingInvite" class="small text-muted">No outgoing invite.</div>
-                </div>
-                <div>
-                  <h3 class="h6">Incoming invites</h3>
-                  <div id="incomingInvites" class="vstack gap-2 mb-3"></div>
-                  <div id="teammateCard" class="alert alert-success d-none"></div>
-                </div>
-              </div>
-            </div>
-          </article>
-
-          <article id="paymentStep" class="card shell-card border-0 shadow-sm d-none step-pane">
-            <div class="card-body">
-              <h2 class="h5">Payment</h2>
-              <p class="small text-muted">Complete payment to finish registration.</p>
-              <div id="paymentInfo" class="mb-3"></div>
-              <button id="completePaymentBtn" class="btn btn-success btn-lg w-100" type="button">Mark Payment Complete</button>
-            </div>
-          </article>
-
-          <article id="completeStep" class="card shell-card border-0 shadow-sm d-none step-pane complete-pane">
-            <div class="card-body">
-              <h2 class="h5 text-success">You are registered</h2>
-              <p class="mb-0">You can log in and out anytime. Your progress stays saved.</p>
-            </div>
-          </article>
-        </section>
-      </div>
-    </section>
-  </main>
+    </div>
+  </div>
 
   <script>
     window.__BOOT_USER__ = <?php echo json_encode(
@@ -188,7 +219,7 @@ $orgName = (string) ($config['app']['organization'] ?? 'SUNY Purchase');
       JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
     ); ?>;
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/js/tabler.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tabler/core@latest/dist/js/tabler.min.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

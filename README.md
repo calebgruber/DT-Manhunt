@@ -2,7 +2,7 @@
 
 Campus-wide Manhunt platform blueprint for SUNY Purchase using:
 
-- **PHP + SQLite (scaffold) + Bootstrap 5** (cPanel-hosted web app)
+- **PHP + SQLite (scaffold) + Tabler UI (Bootstrap-based)** (cPanel-hosted web app)
 - **Node.js + WebSockets** (real-time engine)
 - **Apache/Nginx reverse proxy** (`wss://yourdomain.com/ws`)
 
@@ -22,7 +22,7 @@ Campus-wide Manhunt platform blueprint for SUNY Purchase using:
 
 - `docs/architecture.md` – end-to-end system architecture and deployment model
 - `docs/event-model.md` – WebSocket and PHP↔Node event contracts
-- `docs/ui-wireframes.md` – Bootstrap 5 screen-level wireframes/spec
+- `docs/ui-wireframes.md` – Tabler UI screen-level wireframes/spec
 - `starter.sql` – MySQL starter schema for production database setup
 
 ## Suggested Project Layout (cPanel deployment)
