@@ -4,10 +4,13 @@ const state = {
   user: window.__BOOT_USER__ || null,
   matchmaking: null,
   venmoLink: '',
+  dashboard: null,
   pollTimer: null,
   pollBusy: false,
   activeRequests: 0,
   currentStep: null,
+  locationWatchId: null,
+  locationLastSentAt: 0,
 };
 
 const ui = {
@@ -43,6 +46,17 @@ const ui = {
   toastContainer: document.getElementById('toastContainer'),
   loadingOverlay: document.getElementById('loadingOverlay'),
   loadingText: document.getElementById('loadingText'),
+  userAlertBanner: document.getElementById('userAlertBanner'),
+  userAlertText: document.getElementById('userAlertText'),
+  acknowledgeAlertBtn: document.getElementById('acknowledgeAlertBtn'),
+  dashboardStatusLine: document.getElementById('dashboardStatusLine'),
+  dashboardAnnouncement: document.getElementById('dashboardAnnouncement'),
+  dashboardMessages: document.getElementById('dashboardMessages'),
+  incidentForm: document.getElementById('incidentForm'),
+  dashboardIncidents: document.getElementById('dashboardIncidents'),
+  killboardSummary: document.getElementById('killboardSummary'),
+  killboardCards: document.getElementById('killboardCards'),
+  unenrollBtn: document.getElementById('unenrollBtn'),
 };
 
 function setLoading(show, text = 'Loading...') {
@@ -128,7 +142,7 @@ function setAuthTab(tab) {
 function renderStepper(step) {
   const idx = Math.max(0, steps.indexOf(step));
   ui.stepper.innerHTML = '';
-  const labels = ['Profile', 'Mode', 'Match', 'Pay', 'Done'];
+  const labels = ['Profile', 'Mode', 'Match', 'Pay', 'Dashboard'];
   labels.forEach((label, i) => {
     const node = document.createElement('div');
     node.className = `step ${i <= idx ? 'active' : ''}`;
@@ -157,6 +171,185 @@ function showStep(step) {
   state.currentStep = step;
 }
 
+function stopLocationWatch() {
+  if (state.locationWatchId !== null && navigator.geolocation) {
+    navigator.geolocation.clearWatch(state.locationWatchId);
+  }
+  state.locationWatchId = null;
+}
+
+async function sendLocation(position) {
+  const now = Date.now();
+  if (now - state.locationLastSentAt < 10000) {
+    return;
+  }
+  state.locationLastSentAt = now;
+  try {
+    await api(
+      'update_location',
+      {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+      },
+      { loading: false }
+    );
+  } catch (_) {
+    // silent during background location updates
+  }
+}
+
+function maybeStartLocationWatch() {
+  if (!state.user || !state.dashboard) {
+    stopLocationWatch();
+    return;
+  }
+  const shouldTrack = state.user.is_enrolled && state.dashboard.game_stage === 'live';
+  if (!shouldTrack) {
+    stopLocationWatch();
+    return;
+  }
+  if (!navigator.geolocation || state.locationWatchId !== null) {
+    return;
+  }
+  state.locationWatchId = navigator.geolocation.watchPosition(
+    sendLocation,
+    () => {
+      // no-op on geolocation errors
+    },
+    { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+  );
+}
+
+function renderMessages(messages) {
+  ui.dashboardMessages.textContent = '';
+  if (!messages.length) {
+    const empty = document.createElement('div');
+    empty.className = 'text-secondary small';
+    empty.textContent = 'No messages yet.';
+    ui.dashboardMessages.appendChild(empty);
+    return;
+  }
+
+  messages.forEach((msg) => {
+    const row = document.createElement('div');
+    row.className = `p-2 rounded border ${msg.is_read ? 'bg-transparent' : 'bg-azure-lt'}`;
+
+    const top = document.createElement('div');
+    top.className = 'd-flex justify-content-between gap-2';
+    const scope = document.createElement('small');
+    scope.className = 'text-secondary';
+    scope.textContent = msg.recipient_scope;
+    const time = document.createElement('small');
+    time.className = 'text-secondary';
+    time.textContent = new Date(msg.created_at).toLocaleString();
+    top.append(scope, time);
+
+    const body = document.createElement('div');
+    body.className = 'fw-medium';
+    body.textContent = msg.body;
+
+    row.append(top, body);
+
+    if (!msg.is_read) {
+      const markBtn = document.createElement('button');
+      markBtn.className = 'btn btn-sm btn-outline-secondary mt-2';
+      markBtn.type = 'button';
+      markBtn.textContent = 'Mark read';
+      markBtn.addEventListener('click', async () => {
+        try {
+          await api('mark_message_read', { message_id: msg.message_id }, { loading: false });
+          await refreshState(true);
+        } catch (error) {
+          toast(error.message, 'danger');
+        }
+      });
+      row.appendChild(markBtn);
+    }
+
+    ui.dashboardMessages.appendChild(row);
+  });
+}
+
+function renderIncidents(incidents) {
+  ui.dashboardIncidents.textContent = '';
+  if (!incidents.length) {
+    const empty = document.createElement('div');
+    empty.className = 'text-secondary small';
+    empty.textContent = 'No incidents submitted.';
+    ui.dashboardIncidents.appendChild(empty);
+    return;
+  }
+
+  incidents.forEach((incident) => {
+    const card = document.createElement('div');
+    card.className = 'border rounded p-2';
+    card.innerHTML = `
+      <div class="d-flex justify-content-between gap-2">
+        <strong>${incident.incident_type}</strong>
+        <span class="badge bg-secondary-lt text-secondary">${incident.severity}</span>
+      </div>
+      <div class="small text-secondary mb-1">${new Date(incident.created_at).toLocaleString()}</div>
+      <div class="mb-1">${incident.details}</div>
+      <div class="small">Status: <span class="fw-semibold">${incident.status}</span></div>
+    `;
+    ui.dashboardIncidents.appendChild(card);
+  });
+}
+
+function renderKillboard(killboard) {
+  const counts = killboard?.counts || { in: 0, eliminated: 0, out: 0 };
+  ui.killboardSummary.textContent = `In: ${counts.in} • Eliminated: ${counts.eliminated} • Out: ${counts.out}`;
+  ui.killboardCards.textContent = '';
+
+  const players = killboard?.players || [];
+  if (!players.length) {
+    const empty = document.createElement('div');
+    empty.className = 'text-secondary small';
+    empty.textContent = 'No players yet.';
+    ui.killboardCards.appendChild(empty);
+    return;
+  }
+
+  players.forEach((player) => {
+    const col = document.createElement('div');
+    col.className = 'col-12 col-md-6 col-xl-4';
+    const badgeClass = player.status === 'in'
+      ? 'bg-success-lt text-success'
+      : player.status === 'eliminated'
+        ? 'bg-warning-lt text-warning'
+        : 'bg-secondary-lt text-secondary';
+
+    col.innerHTML = `
+      <div class="card card-sm">
+        <div class="card-body d-flex justify-content-between align-items-center gap-2">
+          <div>
+            <div class="fw-semibold">${player.full_name}</div>
+            <div class="small text-secondary">${player.mode || 'unset'} mode</div>
+          </div>
+          <span class="badge ${badgeClass}">${player.status}</span>
+        </div>
+      </div>
+    `;
+    ui.killboardCards.appendChild(col);
+  });
+}
+
+function renderDashboard() {
+  const dashboard = state.dashboard;
+  if (!dashboard) {
+    return;
+  }
+
+  const stage = dashboard.game_stage || 'pregame';
+  const gameInfo = dashboard.game_info ? ` • ${dashboard.game_info}` : '';
+  ui.dashboardStatusLine.textContent = `Stage: ${stage}${gameInfo} • Unread messages: ${dashboard.unread_messages || 0}`;
+  ui.dashboardAnnouncement.textContent = dashboard.announcement || 'No announcement yet.';
+  renderMessages(dashboard.inbox || []);
+  renderIncidents(dashboard.incidents || []);
+  renderKillboard(dashboard.killboard || {});
+}
+
 function renderUser() {
   const loggedIn = !!state.user;
   ui.authSection.classList.toggle('d-none', loggedIn);
@@ -167,12 +360,18 @@ function renderUser() {
 
   if (!loggedIn) {
     ui.loggedInUserLabel.textContent = '';
+    ui.userAlertBanner.classList.add('d-none');
+    stopLocationWatch();
     stopPolling();
     state.currentStep = null;
     return;
   }
 
   ui.loggedInUserLabel.textContent = `Logged in: ${state.user.full_name}`;
+
+  const alertText = (state.user.pending_alert || '').trim();
+  ui.userAlertBanner.classList.toggle('d-none', !alertText);
+  ui.userAlertText.textContent = alertText;
 
   const step = state.user.registration_step || 'profile';
   renderStepper(step);
@@ -213,6 +412,8 @@ function renderUser() {
     ui.completePaymentBtn.textContent = 'Submit Payment for Approval';
   }
 
+  renderDashboard();
+  maybeStartLocationWatch();
   startPolling();
 }
 
@@ -222,6 +423,7 @@ async function refreshState(quiet = false) {
   state.user = data.user;
   state.matchmaking = { teammate: data.teammate };
   state.venmoLink = data.venmo_link || '';
+  state.dashboard = data.dashboard || null;
   renderUser();
 }
 
@@ -377,8 +579,9 @@ async function pollTick() {
     state.user = data.user;
     state.matchmaking = { teammate: data.teammate };
     state.venmoLink = data.venmo_link || '';
+    state.dashboard = data.dashboard || null;
     renderUser();
-  } catch (error) {
+  } catch (_) {
     // keep quiet during background polling
   } finally {
     state.pollBusy = false;
@@ -433,6 +636,8 @@ function wireEvents() {
       await api('logout', {}, { loadingText: 'Logging out...' });
       state.user = null;
       state.matchmaking = null;
+      state.dashboard = null;
+      stopLocationWatch();
       renderUser();
       toast('Logged out', 'secondary');
     } catch (error) {
@@ -497,6 +702,41 @@ function wireEvents() {
       state.matchmaking = null;
       await refreshState();
       toast('Switched to solo. Continue to payment.', 'info');
+    } catch (error) {
+      toast(error.message, 'danger');
+    }
+  });
+
+  ui.acknowledgeAlertBtn?.addEventListener('click', async () => {
+    try {
+      await api('acknowledge_alert', {}, { loading: false });
+      await refreshState(true);
+    } catch (error) {
+      toast(error.message, 'danger');
+    }
+  });
+
+  ui.incidentForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      const payload = Object.fromEntries(new FormData(ui.incidentForm).entries());
+      await api('report_incident', payload, { loadingText: 'Submitting incident...' });
+      ui.incidentForm.reset();
+      toast('Incident report sent to admins.', 'success');
+      await refreshState(true);
+    } catch (error) {
+      toast(error.message, 'danger');
+    }
+  });
+
+  ui.unenrollBtn?.addEventListener('click', async () => {
+    const confirmed = window.confirm('Are you sure you want to unenroll? This will remove you from active gameplay.');
+    if (!confirmed) return;
+    try {
+      const data = await api('unenroll', {}, { loadingText: 'Unenrolling...' });
+      state.user = data.user;
+      await refreshState();
+      toast('You have been unenrolled.', 'warning');
     } catch (error) {
       toast(error.message, 'danger');
     }

@@ -149,6 +149,12 @@ $concentrationOptions = $registrationOptions['concentration_options'];
           </section>
 
           <section id="appSection" class="d-none">
+            <div id="userAlertBanner" class="alert alert-warning d-none mb-3">
+              <div class="d-flex justify-content-between align-items-start gap-2">
+                <div id="userAlertText" class="fw-semibold"></div>
+                <button id="acknowledgeAlertBtn" class="btn btn-sm btn-warning" type="button">Acknowledge</button>
+              </div>
+            </div>
             <div class="row g-3">
               <div class="col-12 col-xl-4">
                 <div id="stepperCard" class="card sticky-panel">
@@ -235,8 +241,63 @@ $concentrationOptions = $registrationOptions['concentration_options'];
 
                 <article id="completeStep" class="card d-none step-pane">
                   <div class="card-body">
-                    <h2 class="h3 text-success mb-2">You are registered</h2>
-                    <p class="text-secondary mb-0">You can log in and out anytime, and your progress stays saved.</p>
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                      <h2 class="h3 text-success mb-0">Live Dashboard</h2>
+                      <button id="unenrollBtn" class="btn btn-outline-danger btn-sm" type="button">
+                        <i class="ti ti-user-x me-1"></i>Unenroll
+                      </button>
+                    </div>
+                    <p id="dashboardStatusLine" class="text-secondary mb-3">Loading game status…</p>
+
+                    <div class="row g-3 mb-3">
+                      <div class="col-12 col-lg-6">
+                        <div class="card">
+                          <div class="card-header"><h3 class="card-title mb-0">Announcement</h3></div>
+                          <div id="dashboardAnnouncement" class="card-body text-secondary">No announcement yet.</div>
+                        </div>
+                      </div>
+                      <div class="col-12 col-lg-6">
+                        <div class="card">
+                          <div class="card-header"><h3 class="card-title mb-0">Live Messages</h3></div>
+                          <div id="dashboardMessages" class="card-body vstack gap-2"></div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                      <div class="col-12 col-lg-6">
+                        <div class="card">
+                          <div class="card-header"><h3 class="card-title mb-0">Report Incident</h3></div>
+                          <div class="card-body">
+                            <form id="incidentForm" class="vstack gap-2">
+                              <input class="form-control" type="text" name="incident_type" placeholder="Incident type (UPD, medical, etc.)" required>
+                              <select class="form-select" name="severity" required>
+                                <option value="low">Low</option>
+                                <option value="medium">Medium</option>
+                                <option value="high">High</option>
+                                <option value="emergency">Emergency</option>
+                              </select>
+                              <textarea class="form-control" name="details" rows="3" placeholder="What happened?" required></textarea>
+                              <button class="btn btn-primary" type="submit">Send Incident Report</button>
+                            </form>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="col-12 col-lg-6">
+                        <div class="card">
+                          <div class="card-header"><h3 class="card-title mb-0">Your Incident Reports</h3></div>
+                          <div id="dashboardIncidents" class="card-body vstack gap-2"></div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="card">
+                      <div class="card-header"><h3 class="card-title mb-0">Live Kill Board</h3></div>
+                      <div class="card-body">
+                        <div id="killboardSummary" class="text-secondary mb-2"></div>
+                        <div id="killboardCards" class="row g-2"></div>
+                      </div>
+                    </div>
                   </div>
                 </article>
               </div>

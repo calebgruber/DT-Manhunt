@@ -16,6 +16,7 @@ $admin = currentAdminUser();
   <title><?php echo htmlspecialchars($appName, ENT_QUOTES, 'UTF-8'); ?> Admin</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@latest/dist/css/tabler.min.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
 <body>
   <div class="page">
@@ -61,6 +62,36 @@ $admin = currentAdminUser();
             </div>
 
             <div class="row g-3">
+              <div class="col-12">
+                <div class="card">
+                  <div class="card-header"><h3 class="card-title">Live Game Controls</h3></div>
+                  <div class="card-body">
+                    <form id="gameStateForm" class="row g-2">
+                      <div class="col-12 col-lg-3">
+                        <label class="form-label" for="gameStage">Game Stage</label>
+                        <select id="gameStage" class="form-select" name="game_stage" required>
+                          <option value="pregame">Pre-game</option>
+                          <option value="live">Live</option>
+                          <option value="paused">Paused</option>
+                          <option value="ended">Ended</option>
+                        </select>
+                      </div>
+                      <div class="col-12 col-lg-4">
+                        <label class="form-label" for="announcementText">Announcement</label>
+                        <input id="announcementText" class="form-control" name="announcement" type="text" placeholder="Urgent or general update">
+                      </div>
+                      <div class="col-12 col-lg-3">
+                        <label class="form-label" for="gameInfoText">Show Info</label>
+                        <input id="gameInfoText" class="form-control" name="game_info" type="text" placeholder="Rules / checkpoint / notes">
+                      </div>
+                      <div class="col-12 col-lg-2 d-flex align-items-end">
+                        <button class="btn btn-primary w-100" type="submit">Save Live State</button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              </div>
+
               <div class="col-12 col-xl-5">
                 <div class="card">
                   <div class="card-header"><h3 class="card-title">Venmo Settings</h3></div>
@@ -83,6 +114,91 @@ $admin = currentAdminUser();
                         <tr><th>User</th><th>Status</th><th>Step</th><th></th></tr>
                       </thead>
                       <tbody id="paymentsBody"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <div class="col-12 col-xl-7">
+                <div class="card">
+                  <div class="card-header"><h3 class="card-title">Live Messaging</h3></div>
+                  <div class="card-body">
+                    <form id="messageForm" class="row g-2 mb-3">
+                      <div class="col-12 col-lg-3">
+                        <label class="form-label" for="messageTarget">Target</label>
+                        <select id="messageTarget" class="form-select" name="target">
+                          <option value="all_users">Everyone</option>
+                          <option value="active">Everyone still in</option>
+                          <option value="eliminated">Eliminated / out</option>
+                          <option value="user">Single user</option>
+                          <option value="duo">Specific duo</option>
+                          <option value="group">Custom group</option>
+                        </select>
+                      </div>
+                      <div class="col-12 col-lg-3">
+                        <label class="form-label" for="messageUserId">User ID (user/duo)</label>
+                        <input id="messageUserId" class="form-control" name="user_id" type="number" min="1">
+                      </div>
+                      <div class="col-12 col-lg-3">
+                        <label class="form-label" for="messageGroupIds">Group User IDs</label>
+                        <input id="messageGroupIds" class="form-control" name="group_user_ids" type="text" placeholder="2,5,9">
+                      </div>
+                      <div class="col-12 col-lg-3">
+                        <label class="form-label" for="messageText">Message</label>
+                        <input id="messageText" class="form-control" name="message" type="text" required>
+                      </div>
+                      <div class="col-12">
+                        <button class="btn btn-primary" type="submit">Send Live Message</button>
+                      </div>
+                    </form>
+                    <div id="messagesFeed" class="vstack gap-2"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="col-12">
+                <div class="card">
+                  <div class="card-header"><h3 class="card-title">Live Location Map</h3></div>
+                  <div class="card-body">
+                    <div id="liveMap" style="height: 320px;" class="rounded border mb-3"></div>
+                    <div class="table-responsive">
+                      <table class="table table-vcenter card-table">
+                        <thead>
+                          <tr><th>Player</th><th>Status</th><th>Coordinates</th><th>Updated</th></tr>
+                        </thead>
+                        <tbody id="locationsBody"></tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="col-12">
+                <div class="card">
+                  <div class="card-header"><h3 class="card-title">Live Kill Board Controls</h3></div>
+                  <div class="card-body">
+                    <div id="killboardSummary" class="text-secondary mb-2"></div>
+                    <div class="table-responsive">
+                      <table class="table table-vcenter card-table">
+                        <thead>
+                          <tr><th>Player</th><th>Mode</th><th>Status</th><th>Actions</th></tr>
+                        </thead>
+                        <tbody id="killboardBody"></tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="col-12">
+                <div class="card">
+                  <div class="card-header"><h3 class="card-title">Incident Reports</h3></div>
+                  <div class="table-responsive">
+                    <table class="table table-vcenter card-table">
+                      <thead>
+                        <tr><th>Reporter</th><th>Type</th><th>Severity</th><th>Details</th><th>Status</th><th></th></tr>
+                      </thead>
+                      <tbody id="incidentsBody"></tbody>
                     </table>
                   </div>
                 </div>
@@ -117,6 +233,7 @@ $admin = currentAdminUser();
     ); ?>;
   </script>
   <script src="https://cdn.jsdelivr.net/npm/@tabler/core@latest/dist/js/tabler.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="/admin/admin.js"></script>
 </body>
 </html>

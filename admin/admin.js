@@ -1,6 +1,8 @@
 const state = {
   admin: window.__BOOT_ADMIN__ || null,
   pollTimer: null,
+  map: null,
+  mapMarkers: new Map(),
 };
 
 const ui = {
@@ -13,6 +15,20 @@ const ui = {
   venmoLink: document.getElementById('venmoLink'),
   paymentsBody: document.getElementById('paymentsBody'),
   matchesBody: document.getElementById('matchesBody'),
+  gameStateForm: document.getElementById('gameStateForm'),
+  gameStage: document.getElementById('gameStage'),
+  announcementText: document.getElementById('announcementText'),
+  gameInfoText: document.getElementById('gameInfoText'),
+  messageForm: document.getElementById('messageForm'),
+  messageTarget: document.getElementById('messageTarget'),
+  messageUserId: document.getElementById('messageUserId'),
+  messageGroupIds: document.getElementById('messageGroupIds'),
+  messageText: document.getElementById('messageText'),
+  messagesFeed: document.getElementById('messagesFeed'),
+  locationsBody: document.getElementById('locationsBody'),
+  killboardSummary: document.getElementById('killboardSummary'),
+  killboardBody: document.getElementById('killboardBody'),
+  incidentsBody: document.getElementById('incidentsBody'),
 };
 
 function notice(message, type = 'info') {
@@ -32,6 +48,17 @@ async function api(action, payload = {}) {
     throw new Error(data.message || 'Request failed');
   }
   return data;
+}
+
+function ensureMap() {
+  if (state.map || !window.L) {
+    return;
+  }
+  state.map = L.map('liveMap').setView([41.04, -73.7], 14);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors',
+  }).addTo(state.map);
 }
 
 function renderPayments(payments) {
@@ -91,8 +118,8 @@ function renderPayments(payments) {
         notice(error.message, 'danger');
       }
     });
-    actionTd.append(approveBtn, resetBtn);
 
+    actionTd.append(approveBtn, resetBtn);
     tr.append(userTd, statusTd, stepTd, actionTd);
     ui.paymentsBody.appendChild(tr);
   });
@@ -111,27 +138,13 @@ function renderMatches(matches) {
     const tr = document.createElement('tr');
 
     const pairTd = document.createElement('td');
-    const userA = document.createElement('div');
-    userA.className = 'fw-semibold';
-    userA.textContent = match.user_a_name;
-    const userB = document.createElement('div');
-    userB.className = 'fw-semibold';
-    userB.textContent = match.user_b_name;
-    pairTd.append(userA, userB);
+    pairTd.innerHTML = `<div class="fw-semibold">${match.user_a_name}</div><div class="fw-semibold">${match.user_b_name}</div>`;
 
     const paymentTd = document.createElement('td');
-    const paymentA = document.createElement('div');
-    paymentA.textContent = match.user_a_payment;
-    const paymentB = document.createElement('div');
-    paymentB.textContent = match.user_b_payment;
-    paymentTd.append(paymentA, paymentB);
+    paymentTd.innerHTML = `<div>${match.user_a_payment}</div><div>${match.user_b_payment}</div>`;
 
     const stepTd = document.createElement('td');
-    const stepA = document.createElement('div');
-    stepA.textContent = match.user_a_step;
-    const stepB = document.createElement('div');
-    stepB.textContent = match.user_b_step;
-    stepTd.append(stepA, stepB);
+    stepTd.innerHTML = `<div>${match.user_a_step}</div><div>${match.user_b_step}</div>`;
 
     const actionsTd = document.createElement('td');
     const resetBtn = document.createElement('button');
@@ -168,17 +181,189 @@ function renderMatches(matches) {
   });
 }
 
+function renderMessages(messages) {
+  ui.messagesFeed.textContent = '';
+  if (!messages.length) {
+    const empty = document.createElement('div');
+    empty.className = 'text-secondary small';
+    empty.textContent = 'No messages sent yet.';
+    ui.messagesFeed.appendChild(empty);
+    return;
+  }
+
+  messages.forEach((message) => {
+    const row = document.createElement('div');
+    row.className = 'border rounded p-2';
+    row.innerHTML = `
+      <div class="d-flex justify-content-between gap-2">
+        <strong>${message.recipient_scope}</strong>
+        <small class="text-secondary">${new Date(message.created_at).toLocaleString()}</small>
+      </div>
+      <div>${message.body}</div>
+      <small class="text-secondary">Recipients: ${message.recipient_count}</small>
+    `;
+    ui.messagesFeed.appendChild(row);
+  });
+}
+
+function renderLocations(locations) {
+  ui.locationsBody.textContent = '';
+  ensureMap();
+
+  const seen = new Set();
+  locations.forEach((location) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><div class="fw-semibold">${location.full_name}</div><small class="text-secondary">${location.phone}</small></td>
+      <td>${location.game_status}${location.is_enrolled ? '' : ' (unenrolled)'}</td>
+      <td>${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}</td>
+      <td>${location.location_updated_at ? new Date(location.location_updated_at).toLocaleTimeString() : '—'}</td>
+    `;
+    ui.locationsBody.appendChild(tr);
+
+    if (state.map) {
+      seen.add(location.id);
+      const markerLabel = `${location.full_name} (${location.game_status})`;
+      if (state.mapMarkers.has(location.id)) {
+        const marker = state.mapMarkers.get(location.id);
+        marker.setLatLng([location.latitude, location.longitude]);
+        marker.bindPopup(markerLabel);
+      } else {
+        const marker = L.marker([location.latitude, location.longitude]).addTo(state.map).bindPopup(markerLabel);
+        state.mapMarkers.set(location.id, marker);
+      }
+    }
+  });
+
+  for (const [id, marker] of state.mapMarkers.entries()) {
+    if (!seen.has(id)) {
+      marker.remove();
+      state.mapMarkers.delete(id);
+    }
+  }
+
+  if (!locations.length) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td colspan="4" class="text-secondary">No live locations yet.</td>';
+    ui.locationsBody.appendChild(tr);
+  }
+}
+
+function renderKillboard(killboard) {
+  const counts = killboard?.counts || { in: 0, eliminated: 0, out: 0 };
+  const players = killboard?.players || [];
+
+  ui.killboardSummary.textContent = `In: ${counts.in} • Eliminated: ${counts.eliminated} • Out: ${counts.out}`;
+  ui.killboardBody.textContent = '';
+
+  if (!players.length) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td colspan="4" class="text-secondary">No players found.</td>';
+    ui.killboardBody.appendChild(tr);
+    return;
+  }
+
+  players.forEach((player) => {
+    const tr = document.createElement('tr');
+
+    const playerTd = document.createElement('td');
+    playerTd.innerHTML = `<div class="fw-semibold">${player.full_name}</div><small class="text-secondary">#${player.id}</small>`;
+
+    const modeTd = document.createElement('td');
+    modeTd.textContent = player.mode || 'unset';
+
+    const statusTd = document.createElement('td');
+    statusTd.textContent = player.status;
+
+    const actionsTd = document.createElement('td');
+    ['in', 'eliminated', 'out'].forEach((status) => {
+      const btn = document.createElement('button');
+      btn.className = `btn btn-sm me-1 ${player.status === status ? 'btn-primary' : 'btn-outline-secondary'}`;
+      btn.type = 'button';
+      btn.textContent = status;
+      btn.disabled = player.status === status;
+      btn.addEventListener('click', async () => {
+        try {
+          await api('admin_set_player_status', { user_id: player.id, status });
+          await refreshAdminData();
+        } catch (error) {
+          notice(error.message, 'danger');
+        }
+      });
+      actionsTd.appendChild(btn);
+    });
+
+    tr.append(playerTd, modeTd, statusTd, actionsTd);
+    ui.killboardBody.appendChild(tr);
+  });
+}
+
+function renderIncidents(incidents) {
+  ui.incidentsBody.textContent = '';
+  if (!incidents.length) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td colspan="6" class="text-secondary">No incidents reported.</td>';
+    ui.incidentsBody.appendChild(tr);
+    return;
+  }
+
+  incidents.forEach((incident) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><div class="fw-semibold">${incident.reporter_name}</div><small class="text-secondary">#${incident.reporter_user_id}</small></td>
+      <td>${incident.incident_type}</td>
+      <td>${incident.severity}</td>
+      <td>${incident.details}</td>
+      <td>${incident.status}</td>
+      <td></td>
+    `;
+
+    const actions = tr.children[5];
+    ['open', 'acknowledged', 'resolved'].forEach((status) => {
+      const btn = document.createElement('button');
+      btn.className = `btn btn-sm me-1 ${incident.status === status ? 'btn-primary' : 'btn-outline-secondary'}`;
+      btn.type = 'button';
+      btn.textContent = status;
+      btn.disabled = incident.status === status;
+      btn.addEventListener('click', async () => {
+        try {
+          await api('admin_update_incident_status', { incident_id: incident.id, status });
+          await refreshAdminData();
+        } catch (error) {
+          notice(error.message, 'danger');
+        }
+      });
+      actions.appendChild(btn);
+    });
+
+    ui.incidentsBody.appendChild(tr);
+  });
+}
+
 async function refreshAdminData() {
   if (!state.admin) return;
-  const [adminState, payments, matches] = await Promise.all([
+  const [adminState, payments, matches, messages, locations, incidents, killboard] = await Promise.all([
     api('admin_state'),
     api('admin_list_payments'),
     api('admin_list_matches'),
+    api('admin_list_messages'),
+    api('admin_list_locations'),
+    api('admin_list_incidents'),
+    api('admin_list_killboard'),
   ]);
+
   state.admin = adminState.admin;
   ui.venmoLink.value = adminState.venmo_link || '';
+  ui.gameStage.value = adminState.game_stage || 'pregame';
+  ui.announcementText.value = adminState.announcement || '';
+  ui.gameInfoText.value = adminState.game_info || '';
+
   renderPayments(payments.payments || []);
   renderMatches(matches.matches || []);
+  renderMessages(messages.messages || []);
+  renderLocations(locations.locations || []);
+  renderIncidents(incidents.incidents || []);
+  renderKillboard(killboard.killboard || adminState.killboard || {});
 }
 
 function setLayout() {
@@ -239,6 +424,33 @@ function wire() {
       const data = await api('admin_set_venmo_link', payload);
       ui.venmoLink.value = data.venmo_link || '';
       notice('Venmo link saved.', 'success');
+    } catch (error) {
+      notice(error.message, 'danger');
+    }
+  });
+
+  ui.gameStateForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      const payload = Object.fromEntries(new FormData(ui.gameStateForm).entries());
+      await api('admin_set_game_state', payload);
+      notice('Live game state updated.', 'success');
+      await refreshAdminData();
+    } catch (error) {
+      notice(error.message, 'danger');
+    }
+  });
+
+  ui.messageForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      const payload = Object.fromEntries(new FormData(ui.messageForm).entries());
+      if (!payload.user_id) delete payload.user_id;
+      if (!payload.group_user_ids) delete payload.group_user_ids;
+      const data = await api('admin_send_message', payload);
+      ui.messageText.value = '';
+      notice(`Message sent to ${data.recipient_count} recipients.`, 'success');
+      await refreshAdminData();
     } catch (error) {
       notice(error.message, 'danger');
     }

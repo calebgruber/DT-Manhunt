@@ -75,3 +75,10 @@ Payment flow:
 - Admins approve payments per user in `/admin/`
 - Admins can reset approvals back to pending
 - Registration completes only after approval (for duos, both users must be approved)
+
+Live gameplay operations:
+- User complete step is now a live dashboard with show info, announcements, inbox messages, incident reporting, and live kill board cards
+- Users can unenroll themselves; if they were in a duo, their teammate is switched to solo and receives a required acknowledge alert
+- Admins can control live game stage/announcement/show-info and send targeted live messages (everyone, active, eliminated, single user, duo, or custom group)
+- When game stage is `live`, user devices request geolocation and post updates for the admin live map
+- Admins can review and update incident statuses and manage kill-board in/out/eliminated status live

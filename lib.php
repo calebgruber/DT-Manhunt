@@ -117,6 +117,13 @@ function bootstrapSqlite(PDO $pdo): void
             teammate_user_id INTEGER,
             payment_status TEXT NOT NULL DEFAULT "pending",
             is_admin INTEGER NOT NULL DEFAULT 0,
+            is_enrolled INTEGER NOT NULL DEFAULT 1,
+            game_status TEXT NOT NULL DEFAULT "in",
+            pending_alert TEXT NOT NULL DEFAULT "",
+            latitude REAL,
+            longitude REAL,
+            location_accuracy REAL,
+            location_updated_at TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             FOREIGN KEY (teammate_user_id) REFERENCES users(id)
@@ -144,12 +151,74 @@ function bootstrapSqlite(PDO $pdo): void
         )'
     );
 
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sender_admin_user_id INTEGER,
+            recipient_scope TEXT NOT NULL,
+            body TEXT NOT NULL,
+            metadata TEXT NOT NULL DEFAULT "",
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (sender_admin_user_id) REFERENCES users(id)
+        )'
+    );
+
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS message_recipients (
+            message_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            is_read INTEGER NOT NULL DEFAULT 0,
+            read_at TEXT,
+            PRIMARY KEY (message_id, user_id),
+            FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )'
+    );
+
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS incidents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            reporter_user_id INTEGER NOT NULL,
+            incident_type TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            details TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT "open",
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (reporter_user_id) REFERENCES users(id)
+        )'
+    );
+
     if (!sqliteHasColumn($pdo, 'users', 'is_admin')) {
         $pdo->exec('ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0');
+    }
+    if (!sqliteHasColumn($pdo, 'users', 'is_enrolled')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN is_enrolled INTEGER NOT NULL DEFAULT 1');
+    }
+    if (!sqliteHasColumn($pdo, 'users', 'game_status')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN game_status TEXT NOT NULL DEFAULT "in"');
+    }
+    if (!sqliteHasColumn($pdo, 'users', 'pending_alert')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN pending_alert TEXT NOT NULL DEFAULT ""');
+    }
+    if (!sqliteHasColumn($pdo, 'users', 'latitude')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN latitude REAL');
+    }
+    if (!sqliteHasColumn($pdo, 'users', 'longitude')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN longitude REAL');
+    }
+    if (!sqliteHasColumn($pdo, 'users', 'location_accuracy')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN location_accuracy REAL');
+    }
+    if (!sqliteHasColumn($pdo, 'users', 'location_updated_at')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN location_updated_at TEXT');
     }
 
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_invites_inviter_status ON invites(inviter_user_id, status)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_invites_invitee_status ON invites(invitee_user_id, status)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_users_enrolled_status ON users(is_enrolled, game_status)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_message_recipients_user_read ON message_recipients(user_id, is_read)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_incidents_status_created ON incidents(status, created_at)');
 }
 
 function nowUtc(): string
@@ -290,6 +359,9 @@ function userPublic(array $user): array
         'registration_step' => (string) $user['registration_step'],
         'teammate_user_id' => $user['teammate_user_id'] ? (int) $user['teammate_user_id'] : null,
         'payment_status' => (string) $user['payment_status'],
+        'is_enrolled' => (int) ($user['is_enrolled'] ?? 1) === 1,
+        'game_status' => (string) ($user['game_status'] ?? 'in'),
+        'pending_alert' => trim((string) ($user['pending_alert'] ?? '')),
         'is_admin' => userIsAdmin($user),
     ];
 }
@@ -328,7 +400,9 @@ function teammateFor(?int $userId): ?array
 function canBeMatched(array $user): bool
 {
     return in_array((string) ($user['registration_step'] ?? ''), ['profile', 'mode', 'matchmaking'], true)
-        && ($user['teammate_user_id'] ?? null) === null;
+        && ($user['teammate_user_id'] ?? null) === null
+        && (int) ($user['is_enrolled'] ?? 1) === 1
+        && (string) ($user['game_status'] ?? 'in') !== 'eliminated';
 }
 
 function appSetting(string $key, string $default = ''): string
@@ -379,6 +453,17 @@ function venmoLink(): string
     $adminConfig = is_array($config['admin'] ?? null) ? $config['admin'] : [];
     $default = trim((string) ($adminConfig['venmo_link'] ?? ''));
     return trim(appSetting('venmo_link', $default));
+}
+
+function gameStage(): string
+{
+    $raw = strtolower(trim(appSetting('game_stage', 'pregame')));
+    return in_array($raw, ['pregame', 'live', 'paused', 'ended'], true) ? $raw : 'pregame';
+}
+
+function gameAnnouncement(): string
+{
+    return trim(appSetting('announcement', ''));
 }
 
 function ensureConfiguredTestAdmin(PDO $pdo): void

@@ -57,6 +57,177 @@ function pairStatus(PDO $pdo, int $userId, int $teammateId): array
     ];
 }
 
+function normalizeUserIds(mixed $rawIds): array
+{
+    $parts = [];
+    if (is_array($rawIds)) {
+        $parts = $rawIds;
+    } elseif (is_string($rawIds)) {
+        $parts = preg_split('/\s*,\s*/', trim($rawIds)) ?: [];
+    }
+
+    $ids = [];
+    foreach ($parts as $part) {
+        $id = (int) $part;
+        if ($id > 0) {
+            $ids[$id] = $id;
+        }
+    }
+
+    return array_values($ids);
+}
+
+function loadInbox(PDO $pdo, int $userId): array
+{
+    $stmt = $pdo->prepare(
+        "SELECT mr.message_id, mr.is_read, m.body, m.recipient_scope, m.created_at
+         FROM message_recipients mr
+         JOIN messages m ON m.id = mr.message_id
+         WHERE mr.user_id = :user_id
+         ORDER BY m.id DESC
+         LIMIT 25"
+    );
+    $stmt->execute(['user_id' => $userId]);
+
+    return array_map(static fn (array $row): array => [
+        'message_id' => (int) $row['message_id'],
+        'is_read' => (int) $row['is_read'] === 1,
+        'body' => (string) $row['body'],
+        'recipient_scope' => (string) $row['recipient_scope'],
+        'created_at' => (string) $row['created_at'],
+    ], $stmt->fetchAll());
+}
+
+function killboardData(PDO $pdo): array
+{
+    $stmt = $pdo->query(
+        "SELECT id, full_name, mode, is_enrolled, game_status
+         FROM users
+         ORDER BY
+            CASE WHEN is_enrolled = 1 AND game_status = 'in' THEN 0
+                 WHEN is_enrolled = 1 AND game_status = 'eliminated' THEN 1
+                 ELSE 2 END,
+            lower(full_name) ASC"
+    );
+    $rows = $stmt->fetchAll();
+
+    $counts = [
+        'in' => 0,
+        'eliminated' => 0,
+        'out' => 0,
+    ];
+
+    $players = [];
+    foreach ($rows as $row) {
+        $isEnrolled = (int) ($row['is_enrolled'] ?? 1) === 1;
+        $status = (string) ($row['game_status'] ?? 'in');
+        if (!$isEnrolled || $status === 'out') {
+            $status = 'out';
+        } elseif ($status !== 'eliminated') {
+            $status = 'in';
+        }
+
+        $counts[$status] += 1;
+        $players[] = [
+            'id' => (int) $row['id'],
+            'full_name' => (string) $row['full_name'],
+            'mode' => $row['mode'] ? (string) $row['mode'] : null,
+            'status' => $status,
+        ];
+    }
+
+    return [
+        'counts' => $counts,
+        'players' => $players,
+    ];
+}
+
+function resolveRecipients(PDO $pdo, string $target, ?int $userId, array $groupIds): array
+{
+    if ($target === 'all_users') {
+        $stmt = $pdo->query('SELECT id FROM users');
+        return array_map(static fn (array $row): int => (int) $row['id'], $stmt->fetchAll());
+    }
+
+    if ($target === 'active') {
+        $stmt = $pdo->query("SELECT id FROM users WHERE is_enrolled = 1 AND game_status = 'in'");
+        return array_map(static fn (array $row): int => (int) $row['id'], $stmt->fetchAll());
+    }
+
+    if ($target === 'eliminated') {
+        $stmt = $pdo->query("SELECT id FROM users WHERE game_status = 'eliminated' OR is_enrolled = 0");
+        return array_map(static fn (array $row): int => (int) $row['id'], $stmt->fetchAll());
+    }
+
+    if ($target === 'user') {
+        return $userId ? [$userId] : [];
+    }
+
+    if ($target === 'duo') {
+        if (!$userId) {
+            return [];
+        }
+        $user = findUser($pdo, $userId);
+        if (!$user) {
+            return [];
+        }
+        $ids = [$userId => $userId];
+        $mateId = (int) ($user['teammate_user_id'] ?? 0);
+        if ($mateId > 0) {
+            $mate = findUser($pdo, $mateId);
+            if ($mate && (int) ($mate['teammate_user_id'] ?? 0) === $userId) {
+                $ids[$mateId] = $mateId;
+            }
+        }
+        return array_values($ids);
+    }
+
+    if ($target === 'group') {
+        return $groupIds;
+    }
+
+    return [];
+}
+
+function dashboardPayload(PDO $pdo, array $user): array
+{
+    $uid = (int) $user['id'];
+    $inbox = loadInbox($pdo, $uid);
+    $unread = 0;
+    foreach ($inbox as $msg) {
+        if (!$msg['is_read']) {
+            $unread += 1;
+        }
+    }
+
+    $incStmt = $pdo->prepare(
+        "SELECT id, incident_type, severity, details, status, created_at
+         FROM incidents
+         WHERE reporter_user_id = :uid
+         ORDER BY id DESC
+         LIMIT 10"
+    );
+    $incStmt->execute(['uid' => $uid]);
+    $incidents = array_map(static fn (array $row): array => [
+        'id' => (int) $row['id'],
+        'incident_type' => (string) $row['incident_type'],
+        'severity' => (string) $row['severity'],
+        'details' => (string) $row['details'],
+        'status' => (string) $row['status'],
+        'created_at' => (string) $row['created_at'],
+    ], $incStmt->fetchAll());
+
+    return [
+        'game_stage' => gameStage(),
+        'announcement' => gameAnnouncement(),
+        'game_info' => trim(appSetting('game_info', '')),
+        'inbox' => $inbox,
+        'unread_messages' => $unread,
+        'incidents' => $incidents,
+        'killboard' => killboardData($pdo),
+    ];
+}
+
 $input = body();
 $action = (string) ($input['action'] ?? $_GET['action'] ?? '');
 $pdo = db();
@@ -169,6 +340,9 @@ try {
         respond(true, [
             'admin' => adminPublic($user),
             'venmo_link' => venmoLink(),
+            'game_stage' => gameStage(),
+            'announcement' => gameAnnouncement(),
+            'game_info' => trim(appSetting('game_info', '')),
         ]);
     }
 
@@ -183,6 +357,7 @@ try {
             'user' => userPublic($user),
             'teammate' => teammateFor($user['teammate_user_id'] ? (int) $user['teammate_user_id'] : null),
             'venmo_link' => venmoLink(),
+            'dashboard' => dashboardPayload($pdo, $user),
         ]);
     }
 
@@ -191,7 +366,170 @@ try {
         respond(true, [
             'admin' => adminPublic($admin),
             'venmo_link' => venmoLink(),
+            'game_stage' => gameStage(),
+            'announcement' => gameAnnouncement(),
+            'game_info' => trim(appSetting('game_info', '')),
+            'killboard' => killboardData($pdo),
         ]);
+    }
+
+    if ($action === 'acknowledge_alert') {
+        $user = requireUser();
+        $stmt = $pdo->prepare('UPDATE users SET pending_alert = \'\', updated_at = :updated_at WHERE id = :id');
+        $stmt->execute([
+            'updated_at' => nowUtc(),
+            'id' => (int) $user['id'],
+        ]);
+        respond(true);
+    }
+
+    if ($action === 'mark_message_read') {
+        $user = requireUser();
+        $messageId = (int) ($input['message_id'] ?? 0);
+        if ($messageId <= 0) {
+            respond(false, ['message' => 'Invalid message.'], 422);
+        }
+        $stmt = $pdo->prepare(
+            'UPDATE message_recipients SET is_read = 1, read_at = :read_at WHERE message_id = :message_id AND user_id = :user_id'
+        );
+        $stmt->execute([
+            'read_at' => nowUtc(),
+            'message_id' => $messageId,
+            'user_id' => (int) $user['id'],
+        ]);
+        respond(true);
+    }
+
+    if ($action === 'unenroll') {
+        $user = requireUser();
+
+        $pdo->beginTransaction();
+        try {
+            $fresh = findUser($pdo, (int) $user['id']);
+            if (!$fresh) {
+                throw new RuntimeException('User not found.');
+            }
+
+            $updatedAt = nowUtc();
+            $mateId = (int) ($fresh['teammate_user_id'] ?? 0);
+
+            $unenroll = $pdo->prepare(
+                "UPDATE users
+                 SET is_enrolled = 0,
+                     game_status = 'out',
+                     teammate_user_id = NULL,
+                     mode = CASE WHEN mode IS NULL THEN 'solo' ELSE mode END,
+                     pending_alert = '',
+                     registration_step = CASE WHEN payment_status = 'approved' THEN 'complete' ELSE registration_step END,
+                     updated_at = :updated_at
+                 WHERE id = :id"
+            );
+            $unenroll->execute([
+                'updated_at' => $updatedAt,
+                'id' => (int) $fresh['id'],
+            ]);
+
+            if ($mateId > 0) {
+                $mate = findUser($pdo, $mateId);
+                if ($mate && (int) ($mate['teammate_user_id'] ?? 0) === (int) $fresh['id']) {
+                    $alert = $fresh['full_name'] . ' unenrolled. You were switched to solo mode.';
+                    $shiftMate = $pdo->prepare(
+                        "UPDATE users
+                         SET teammate_user_id = NULL,
+                             mode = 'solo',
+                             registration_step = CASE WHEN payment_status = 'approved' THEN 'complete' ELSE 'payment' END,
+                             pending_alert = :alert,
+                             updated_at = :updated_at
+                         WHERE id = :id"
+                    );
+                    $shiftMate->execute([
+                        'alert' => $alert,
+                        'updated_at' => $updatedAt,
+                        'id' => $mateId,
+                    ]);
+                }
+            }
+
+            $cancel = $pdo->prepare(
+                "UPDATE invites
+                 SET status = 'cancelled', updated_at = :updated_at
+                 WHERE status = 'pending'
+                   AND (inviter_user_id = :id OR invitee_user_id = :id OR inviter_user_id = :mate_id OR invitee_user_id = :mate_id)"
+            );
+            $cancel->execute([
+                'updated_at' => $updatedAt,
+                'id' => (int) $fresh['id'],
+                'mate_id' => $mateId,
+            ]);
+
+            $pdo->commit();
+            respond(true, ['user' => userPublic(currentUser())]);
+        } catch (RuntimeException $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            respond(false, ['message' => $e->getMessage()], 409);
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    if ($action === 'report_incident') {
+        $user = requireUser();
+        $type = trim((string) ($input['incident_type'] ?? ''));
+        $severity = strtolower(trim((string) ($input['severity'] ?? '')));
+        $details = trim((string) ($input['details'] ?? ''));
+
+        if ($type === '' || $details === '') {
+            respond(false, ['message' => 'Incident type and details are required.'], 422);
+        }
+        if (!in_array($severity, ['low', 'medium', 'high', 'emergency'], true)) {
+            respond(false, ['message' => 'Severity must be low, medium, high, or emergency.'], 422);
+        }
+
+        $stmt = $pdo->prepare(
+            'INSERT INTO incidents (reporter_user_id, incident_type, severity, details, status, created_at, updated_at) VALUES (:reporter, :incident_type, :severity, :details, :status, :created_at, :updated_at)'
+        );
+        $now = nowUtc();
+        $stmt->execute([
+            'reporter' => (int) $user['id'],
+            'incident_type' => $type,
+            'severity' => $severity,
+            'details' => $details,
+            'status' => 'open',
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        respond(true);
+    }
+
+    if ($action === 'update_location') {
+        $user = requireUser();
+        $lat = (float) ($input['latitude'] ?? 0);
+        $lng = (float) ($input['longitude'] ?? 0);
+        $accuracy = (float) ($input['accuracy'] ?? 0);
+
+        if ($lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) {
+            respond(false, ['message' => 'Invalid coordinates.'], 422);
+        }
+
+        $stmt = $pdo->prepare(
+            'UPDATE users SET latitude = :lat, longitude = :lng, location_accuracy = :acc, location_updated_at = :location_updated_at, updated_at = :updated_at WHERE id = :id'
+        );
+        $now = nowUtc();
+        $stmt->execute([
+            'lat' => $lat,
+            'lng' => $lng,
+            'acc' => $accuracy,
+            'location_updated_at' => $now,
+            'updated_at' => $now,
+            'id' => (int) $user['id'],
+        ]);
+        respond(true);
     }
 
     if ($action === 'set_step') {
@@ -286,7 +624,7 @@ try {
         }
 
         $stmt = $pdo->prepare(
-            "SELECT id, first_name, last_name, full_name, graduation_year, concentration, registration_step, teammate_user_id, mode
+            "SELECT id, first_name, last_name, full_name, graduation_year, concentration, registration_step, teammate_user_id, mode, is_enrolled, game_status
              FROM users
              WHERE id <> :id
                AND lower(full_name) LIKE lower(:query)
@@ -578,6 +916,200 @@ try {
         }
         saveAppSetting('venmo_link', $venmo);
         respond(true, ['venmo_link' => venmoLink()]);
+    }
+
+    if ($action === 'admin_set_game_state') {
+        requireAdmin();
+        $stage = strtolower(trim((string) ($input['game_stage'] ?? gameStage())));
+        $announcement = trim((string) ($input['announcement'] ?? gameAnnouncement()));
+        $gameInfo = trim((string) ($input['game_info'] ?? trim(appSetting('game_info', ''))));
+        if (!in_array($stage, ['pregame', 'live', 'paused', 'ended'], true)) {
+            respond(false, ['message' => 'Invalid game stage.'], 422);
+        }
+        saveAppSetting('game_stage', $stage);
+        saveAppSetting('announcement', $announcement);
+        saveAppSetting('game_info', $gameInfo);
+        respond(true, [
+            'game_stage' => gameStage(),
+            'announcement' => gameAnnouncement(),
+            'game_info' => trim(appSetting('game_info', '')),
+        ]);
+    }
+
+    if ($action === 'admin_send_message') {
+        $admin = requireAdmin();
+        $body = trim((string) ($input['message'] ?? ''));
+        $target = strtolower(trim((string) ($input['target'] ?? 'all_users')));
+        $userId = (int) ($input['user_id'] ?? 0);
+        $groupIds = normalizeUserIds($input['group_user_ids'] ?? []);
+
+        if ($body === '') {
+            respond(false, ['message' => 'Message is required.'], 422);
+        }
+        if (!in_array($target, ['all_users', 'active', 'eliminated', 'user', 'duo', 'group'], true)) {
+            respond(false, ['message' => 'Invalid message target.'], 422);
+        }
+
+        $recipients = resolveRecipients($pdo, $target, $userId > 0 ? $userId : null, $groupIds);
+        if ($recipients === []) {
+            respond(false, ['message' => 'No recipients resolved for this message target.'], 422);
+        }
+
+        $metadata = json_encode([
+            'target' => $target,
+            'user_id' => $userId > 0 ? $userId : null,
+            'group_user_ids' => $groupIds,
+        ], JSON_UNESCAPED_SLASHES);
+
+        $pdo->beginTransaction();
+        try {
+            $insertMsg = $pdo->prepare(
+                'INSERT INTO messages (sender_admin_user_id, recipient_scope, body, metadata, created_at) VALUES (:sender_admin_user_id, :recipient_scope, :body, :metadata, :created_at)'
+            );
+            $now = nowUtc();
+            $insertMsg->execute([
+                'sender_admin_user_id' => (int) $admin['id'],
+                'recipient_scope' => $target,
+                'body' => $body,
+                'metadata' => $metadata ?: '',
+                'created_at' => $now,
+            ]);
+            $messageId = (int) $pdo->lastInsertId();
+
+            $insertRecipient = $pdo->prepare(
+                'INSERT INTO message_recipients (message_id, user_id, is_read, read_at) VALUES (:message_id, :user_id, 0, NULL)'
+            );
+            foreach ($recipients as $recipientId) {
+                try {
+                    $insertRecipient->execute([
+                        'message_id' => $messageId,
+                        'user_id' => $recipientId,
+                    ]);
+                } catch (Throwable) {
+                    // skip duplicate recipient insert
+                }
+            }
+
+            $pdo->commit();
+            respond(true, ['recipient_count' => count($recipients)]);
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    if ($action === 'admin_list_messages') {
+        requireAdmin();
+        $stmt = $pdo->query(
+            "SELECT m.id, m.recipient_scope, m.body, m.created_at, COUNT(mr.user_id) AS recipient_count
+             FROM messages m
+             LEFT JOIN message_recipients mr ON mr.message_id = m.id
+             GROUP BY m.id, m.recipient_scope, m.body, m.created_at
+             ORDER BY m.id DESC
+             LIMIT 50"
+        );
+        $messages = array_map(static fn (array $row): array => [
+            'id' => (int) $row['id'],
+            'recipient_scope' => (string) $row['recipient_scope'],
+            'body' => (string) $row['body'],
+            'created_at' => (string) $row['created_at'],
+            'recipient_count' => (int) $row['recipient_count'],
+        ], $stmt->fetchAll());
+        respond(true, ['messages' => $messages]);
+    }
+
+    if ($action === 'admin_list_locations') {
+        requireAdmin();
+        $stmt = $pdo->query(
+            "SELECT id, full_name, phone, mode, is_enrolled, game_status, latitude, longitude, location_accuracy, location_updated_at
+             FROM users
+             WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+             ORDER BY location_updated_at DESC"
+        );
+        $locations = array_map(static fn (array $row): array => [
+            'id' => (int) $row['id'],
+            'full_name' => (string) $row['full_name'],
+            'phone' => (string) $row['phone'],
+            'mode' => $row['mode'] ? (string) $row['mode'] : null,
+            'is_enrolled' => (int) ($row['is_enrolled'] ?? 1) === 1,
+            'game_status' => (string) ($row['game_status'] ?? 'in'),
+            'latitude' => (float) $row['latitude'],
+            'longitude' => (float) $row['longitude'],
+            'location_accuracy' => $row['location_accuracy'] === null ? null : (float) $row['location_accuracy'],
+            'location_updated_at' => $row['location_updated_at'] ? (string) $row['location_updated_at'] : null,
+        ], $stmt->fetchAll());
+        respond(true, ['locations' => $locations]);
+    }
+
+    if ($action === 'admin_list_incidents') {
+        requireAdmin();
+        $stmt = $pdo->query(
+            "SELECT i.id, i.reporter_user_id, u.full_name AS reporter_name, i.incident_type, i.severity, i.details, i.status, i.created_at
+             FROM incidents i
+             JOIN users u ON u.id = i.reporter_user_id
+             ORDER BY i.id DESC
+             LIMIT 100"
+        );
+        $incidents = array_map(static fn (array $row): array => [
+            'id' => (int) $row['id'],
+            'reporter_user_id' => (int) $row['reporter_user_id'],
+            'reporter_name' => (string) $row['reporter_name'],
+            'incident_type' => (string) $row['incident_type'],
+            'severity' => (string) $row['severity'],
+            'details' => (string) $row['details'],
+            'status' => (string) $row['status'],
+            'created_at' => (string) $row['created_at'],
+        ], $stmt->fetchAll());
+        respond(true, ['incidents' => $incidents]);
+    }
+
+    if ($action === 'admin_update_incident_status') {
+        requireAdmin();
+        $incidentId = (int) ($input['incident_id'] ?? 0);
+        $status = strtolower(trim((string) ($input['status'] ?? '')));
+        if ($incidentId <= 0) {
+            respond(false, ['message' => 'Invalid incident.'], 422);
+        }
+        if (!in_array($status, ['open', 'acknowledged', 'resolved'], true)) {
+            respond(false, ['message' => 'Invalid incident status.'], 422);
+        }
+
+        $stmt = $pdo->prepare('UPDATE incidents SET status = :status, updated_at = :updated_at WHERE id = :id');
+        $stmt->execute([
+            'status' => $status,
+            'updated_at' => nowUtc(),
+            'id' => $incidentId,
+        ]);
+        respond(true);
+    }
+
+    if ($action === 'admin_list_killboard') {
+        requireAdmin();
+        respond(true, ['killboard' => killboardData($pdo)]);
+    }
+
+    if ($action === 'admin_set_player_status') {
+        requireAdmin();
+        $userId = (int) ($input['user_id'] ?? 0);
+        $status = strtolower(trim((string) ($input['status'] ?? '')));
+        if ($userId <= 0) {
+            respond(false, ['message' => 'Invalid user.'], 422);
+        }
+        if (!in_array($status, ['in', 'eliminated', 'out'], true)) {
+            respond(false, ['message' => 'Status must be in, eliminated, or out.'], 422);
+        }
+
+        $isEnrolled = $status === 'out' ? 0 : 1;
+        $stmt = $pdo->prepare('UPDATE users SET game_status = :game_status, is_enrolled = :is_enrolled, updated_at = :updated_at WHERE id = :id');
+        $stmt->execute([
+            'game_status' => $status,
+            'is_enrolled' => $isEnrolled,
+            'updated_at' => nowUtc(),
+            'id' => $userId,
+        ]);
+        respond(true);
     }
 
     if ($action === 'admin_list_payments') {
