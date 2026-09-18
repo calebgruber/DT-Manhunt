@@ -20,7 +20,8 @@ Top sticky stepper (large, mobile friendly):
 
 Step 1: Profile fields
 - full name
-- display name (searchable)
+- first name
+- last name
 - phone number
 - PIN
 - graduation year
@@ -33,7 +34,7 @@ Step 2: Mode select
 - Buttons are full-width on mobile
 
 Step 3 (duo only): Matchmaking screen
-- Search box: `Search teammate by name`
+- Search box: `Search teammate by full name`
 - Search results list with large `Invite` action button
 - Live invite status chip: `Pending`, `Accepted`, `Declined`
 - On decline:

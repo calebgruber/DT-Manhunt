@@ -119,7 +119,7 @@ Validation rules:
   "data": {
     "invite_id": "inv_123",
     "from_user_id": 101,
-    "from_display_name": "Alex",
+    "from_full_name": "Alex Rivers",
     "status": "pending"
   }
 }
