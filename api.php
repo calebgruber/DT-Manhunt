@@ -162,6 +162,9 @@ try {
 
     if ($action === 'search_users') {
         $user = requireUser();
+        if (($user['mode'] ?? null) !== 'duo' || ($user['registration_step'] ?? '') !== 'matchmaking') {
+            reply(false, ['message' => 'Search is only available during duo matchmaking.'], 422);
+        }
         $query = trim((string) ($input['query'] ?? ''));
         if (mb_strlen($query) < 1) {
             reply(true, ['results' => []]);
@@ -287,20 +290,32 @@ try {
             reply(false, ['message' => 'Invite responses are only allowed during matchmaking.'], 422);
         }
 
-        $stmt = $pdo->prepare('SELECT * FROM invites WHERE id = :id');
-        $stmt->execute(['id' => $inviteId]);
-        $invite = $stmt->fetch();
-
-        if (!$invite || (int) $invite['invitee_user_id'] !== (int) $user['id']) {
-            reply(false, ['message' => 'Invite not found.'], 404);
-        }
-
-        if ($invite['status'] !== 'pending') {
-            reply(false, ['message' => 'Invite is no longer pending.'], 409);
-        }
-
         $pdo->beginTransaction();
         try {
+            $inviteStmt = $pdo->prepare('SELECT * FROM invites WHERE id = :id');
+            $inviteStmt->execute(['id' => $inviteId]);
+            $invite = $inviteStmt->fetch();
+
+            if (!$invite || (int) $invite['invitee_user_id'] !== (int) $user['id']) {
+                throw new RuntimeException('Invite not found.');
+            }
+            if (($invite['status'] ?? '') !== 'pending') {
+                throw new RuntimeException('Invite is no longer pending.');
+            }
+
+            $inviterId = (int) $invite['inviter_user_id'];
+            $inviteeId = (int) $invite['invitee_user_id'];
+
+            $userStateStmt = $pdo->prepare('SELECT id, mode, registration_step, teammate_user_id FROM users WHERE id = :id');
+            $userStateStmt->execute(['id' => $inviterId]);
+            $inviter = $userStateStmt->fetch();
+            $userStateStmt->execute(['id' => $inviteeId]);
+            $invitee = $userStateStmt->fetch();
+
+            if (!$inviter || !$invitee) {
+                throw new RuntimeException('User state changed.');
+            }
+
             if ($decision === 'decline') {
                 $update = $pdo->prepare('UPDATE invites SET status = "declined", updated_at = :updated_at WHERE id = :id');
                 $update->execute(['updated_at' => nowIso(), 'id' => $inviteId]);
@@ -316,15 +331,19 @@ try {
                 )
                     ->execute([
                         'updated_at' => nowIso(),
-                        'inviter' => (int) $invite['inviter_user_id'],
-                        'invitee' => (int) $invite['invitee_user_id'],
+                        'inviter' => $inviterId,
+                        'invitee' => $inviteeId,
                     ]);
             } else {
+                if (($inviter['teammate_user_id'] ?? null) || ($invitee['teammate_user_id'] ?? null)) {
+                    throw new RuntimeException('One of the users is already matched.');
+                }
+                if (($inviter['registration_step'] ?? '') !== 'matchmaking' || ($invitee['registration_step'] ?? '') !== 'matchmaking') {
+                    throw new RuntimeException('Both users must still be in matchmaking.');
+                }
+
                 $update = $pdo->prepare('UPDATE invites SET status = "accepted", updated_at = :updated_at WHERE id = :id');
                 $update->execute(['updated_at' => nowIso(), 'id' => $inviteId]);
-
-                $inviterId = (int) $invite['inviter_user_id'];
-                $inviteeId = (int) $invite['invitee_user_id'];
 
                 $pairStmt = $pdo->prepare('UPDATE users SET mode = "duo", teammate_user_id = :mate_id, registration_step = "payment", updated_at = :updated_at WHERE id = :id');
                 $pairStmt->execute(['mate_id' => $inviteeId, 'updated_at' => nowIso(), 'id' => $inviterId]);
@@ -345,6 +364,17 @@ try {
             }
 
             $pdo->commit();
+        } catch (RuntimeException $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            if ($e->getMessage() === 'Invite not found.') {
+                reply(false, ['message' => 'Invite not found.'], 404);
+            }
+            if ($e->getMessage() === 'Invite is no longer pending.') {
+                reply(false, ['message' => 'Invite is no longer pending.'], 409);
+            }
+            reply(false, ['message' => $e->getMessage()], 409);
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
@@ -366,29 +396,46 @@ try {
             reply(false, ['message' => 'Duo payment requires a matched teammate.'], 422);
         }
 
-        $stmt = $pdo->prepare('UPDATE users SET payment_status = "paid", updated_at = :updated_at WHERE id = :id');
-        $stmt->execute(['updated_at' => nowIso(), 'id' => (int) $user['id']]);
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare('UPDATE users SET payment_status = "paid", updated_at = :updated_at WHERE id = :id');
+            $stmt->execute(['updated_at' => nowIso(), 'id' => (int) $user['id']]);
 
-        if (($user['mode'] ?? null) === 'duo' && $teammateId) {
-            $mateStmt = $pdo->prepare('SELECT payment_status FROM users WHERE id = :id');
-            $mateStmt->execute(['id' => $teammateId]);
-            $mate = $mateStmt->fetch();
-            $bothPaid = $mate && ($mate['payment_status'] ?? '') === 'paid';
-
-            if ($bothPaid) {
-                $finalize = $pdo->prepare('UPDATE users SET registration_step = "complete", updated_at = :updated_at WHERE id = :id OR id = :teammate_id');
-                $finalize->execute([
-                    'updated_at' => nowIso(),
+            if (($user['mode'] ?? null) === 'duo' && $teammateId) {
+                $pairStateStmt = $pdo->prepare('SELECT id, payment_status FROM users WHERE id = :id OR id = :teammate_id');
+                $pairStateStmt->execute([
                     'id' => (int) $user['id'],
                     'teammate_id' => $teammateId,
                 ]);
+                $pairRows = $pairStateStmt->fetchAll();
+                $bothPaid = count($pairRows) === 2 && array_reduce(
+                    $pairRows,
+                    static fn (bool $carry, array $row): bool => $carry && (($row['payment_status'] ?? '') === 'paid'),
+                    true
+                );
+
+                if ($bothPaid) {
+                    $finalize = $pdo->prepare('UPDATE users SET registration_step = "complete", updated_at = :updated_at WHERE id = :id OR id = :teammate_id');
+                    $finalize->execute([
+                        'updated_at' => nowIso(),
+                        'id' => (int) $user['id'],
+                        'teammate_id' => $teammateId,
+                    ]);
+                } else {
+                    $hold = $pdo->prepare('UPDATE users SET registration_step = "payment", updated_at = :updated_at WHERE id = :id');
+                    $hold->execute(['updated_at' => nowIso(), 'id' => (int) $user['id']]);
+                }
             } else {
-                $hold = $pdo->prepare('UPDATE users SET registration_step = "payment", updated_at = :updated_at WHERE id = :id');
-                $hold->execute(['updated_at' => nowIso(), 'id' => (int) $user['id']]);
+                $soloFinalize = $pdo->prepare('UPDATE users SET registration_step = "complete", updated_at = :updated_at WHERE id = :id');
+                $soloFinalize->execute(['updated_at' => nowIso(), 'id' => (int) $user['id']]);
             }
-        } else {
-            $soloFinalize = $pdo->prepare('UPDATE users SET registration_step = "complete", updated_at = :updated_at WHERE id = :id');
-            $soloFinalize->execute(['updated_at' => nowIso(), 'id' => (int) $user['id']]);
+
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
         }
 
         $user = currentUser();

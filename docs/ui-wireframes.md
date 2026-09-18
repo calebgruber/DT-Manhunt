@@ -1,6 +1,6 @@
 # Bootstrap 5 UI Wireframes (Spec)
 
-DB credentials must be configured via environment/secure config and never committed to source control.
+Current scaffold uses local SQLite (`manhunt.sqlite`); production DB credentials (for MySQL deployment) must stay in secure config and never be committed.
 ## Player Experience
 
 ## A) Login Screen
