@@ -1,13 +1,12 @@
-const state = {
-  user: window.__BOOT_USER__ || null,
-  authTab: 'login',
-  polling: null,
-  matchmaking: null,
-};
-
 const steps = ['profile', 'mode', 'matchmaking', 'payment', 'complete'];
 
-const el = {
+const state = {
+  user: window.__BOOT_USER__ || null,
+  matchmaking: null,
+  pollTimer: null,
+};
+
+const ui = {
   authSection: document.getElementById('authSection'),
   appSection: document.getElementById('appSection'),
   logoutBtn: document.getElementById('logoutBtn'),
@@ -35,25 +34,23 @@ const el = {
   toastContainer: document.getElementById('toastContainer'),
 };
 
-function showToast(message, tone = 'primary') {
+function toast(message, type = 'primary') {
   const wrapper = document.createElement('div');
-  wrapper.className = `toast align-items-center text-bg-${tone} border-0`;
-  wrapper.role = 'alert';
-  const layout = document.createElement('div');
-  layout.className = 'd-flex';
+  wrapper.className = `toast align-items-center text-bg-${type} border-0`;
+  const row = document.createElement('div');
+  row.className = 'd-flex';
   const body = document.createElement('div');
   body.className = 'toast-body';
-  body.textContent = String(message ?? '');
+  body.textContent = String(message);
   const close = document.createElement('button');
-  close.type = 'button';
   close.className = 'btn-close btn-close-white me-2 m-auto';
+  close.type = 'button';
   close.setAttribute('data-bs-dismiss', 'toast');
-  layout.appendChild(body);
-  layout.appendChild(close);
-  wrapper.appendChild(layout);
-  el.toastContainer.appendChild(wrapper);
-  const toast = new bootstrap.Toast(wrapper, { delay: 2500 });
-  toast.show();
+  row.append(body, close);
+  wrapper.appendChild(row);
+  ui.toastContainer.appendChild(wrapper);
+  const t = new bootstrap.Toast(wrapper, { delay: 3000 });
+  t.show();
   wrapper.addEventListener('hidden.bs.toast', () => wrapper.remove());
 }
 
@@ -64,99 +61,77 @@ async function api(action, payload = {}) {
     body: JSON.stringify({ action, ...payload }),
   });
   const data = await res.json();
-  if (!data.ok) throw new Error(data.message || 'Request failed');
+  if (!data.ok) {
+    throw new Error(data.message || 'Request failed');
+  }
   return data;
 }
 
 function setAuthTab(tab) {
-  state.authTab = tab;
   document.querySelectorAll('[data-auth-tab]').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.authTab === tab);
+    const active = btn.dataset.authTab === tab;
+    btn.classList.toggle('active', active);
   });
-  el.loginPanel.classList.toggle('d-none', tab !== 'login');
-  el.registerPanel.classList.toggle('d-none', tab !== 'register');
-}
-
-function stepIndex(step) {
-  const idx = steps.indexOf(step);
-  return idx === -1 ? 0 : idx;
+  ui.loginPanel.classList.toggle('d-none', tab !== 'login');
+  ui.registerPanel.classList.toggle('d-none', tab !== 'register');
 }
 
 function renderStepper(step) {
-  const current = stepIndex(step);
-  const labels = [
-    { key: 'profile', label: 'Profile' },
-    { key: 'mode', label: 'Mode' },
-    { key: 'matchmaking', label: 'Match' },
-    { key: 'payment', label: 'Pay' },
-    { key: 'complete', label: 'Done' },
-  ];
-
-  el.stepper.innerHTML = labels
-    .map((s, idx) => `<div class="step ${idx <= current ? 'active' : ''}"><span>${idx + 1}</span><small>${s.label}</small></div>`)
-    .join('');
+  const idx = Math.max(0, steps.indexOf(step));
+  ui.stepper.innerHTML = '';
+  const labels = ['Profile', 'Mode', 'Match', 'Pay', 'Done'];
+  labels.forEach((label, i) => {
+    const node = document.createElement('div');
+    node.className = `step ${i <= idx ? 'active' : ''}`;
+    const badge = document.createElement('span');
+    badge.textContent = String(i + 1);
+    const text = document.createElement('small');
+    text.textContent = label;
+    node.append(badge, text);
+    ui.stepper.appendChild(node);
+  });
 }
 
-function showOnlyStep(step) {
-  [el.profileStep, el.modeStep, el.matchmakingStep, el.paymentStep, el.completeStep].forEach((node) => node.classList.add('d-none'));
-  stopMatchmakingPolling();
+function showStep(step) {
+  [ui.profileStep, ui.modeStep, ui.matchmakingStep, ui.paymentStep, ui.completeStep].forEach((el) => el.classList.add('d-none'));
+  stopPolling();
 
-  if (step === 'profile') {
-    el.profileStep.classList.remove('d-none');
-  } else if (step === 'mode') {
-    el.modeStep.classList.remove('d-none');
-  } else if (step === 'matchmaking') {
-    el.matchmakingStep.classList.remove('d-none');
-    startMatchmakingPolling();
-  } else if (step === 'payment') {
-    el.paymentStep.classList.remove('d-none');
-  } else {
-    el.completeStep.classList.remove('d-none');
-  }
-}
-
-function setLoggedIn(isLoggedIn) {
-  el.authSection.classList.toggle('d-none', isLoggedIn);
-  el.appSection.classList.toggle('d-none', !isLoggedIn);
-  el.logoutBtn.classList.toggle('d-none', !isLoggedIn);
-  if (!isLoggedIn) stopMatchmakingPolling();
+  if (step === 'profile') ui.profileStep.classList.remove('d-none');
+  else if (step === 'mode') ui.modeStep.classList.remove('d-none');
+  else if (step === 'matchmaking') {
+    ui.matchmakingStep.classList.remove('d-none');
+    startPolling();
+  } else if (step === 'payment') ui.paymentStep.classList.remove('d-none');
+  else ui.completeStep.classList.remove('d-none');
 }
 
 function renderUser() {
-  if (!state.user) {
-    setLoggedIn(false);
+  const loggedIn = !!state.user;
+  ui.authSection.classList.toggle('d-none', loggedIn);
+  ui.appSection.classList.toggle('d-none', !loggedIn);
+  ui.logoutBtn.classList.toggle('d-none', !loggedIn);
+
+  if (!loggedIn) {
+    stopPolling();
     return;
   }
 
-  setLoggedIn(true);
-  const step = state.user.registration_step || 'mode';
+  const step = state.user.registration_step || 'profile';
   renderStepper(step);
-  showOnlyStep(step);
+  showStep(step);
 
-  el.resumeCard.classList.remove('d-none');
-  el.resumeCard.textContent = `Resumed at step: ${step.charAt(0).toUpperCase() + step.slice(1)}`;
+  ui.resumeCard.classList.remove('d-none');
+  ui.resumeCard.textContent = `Resumed at step: ${step}`;
 
-  el.profileSummary.textContent = `${state.user.full_name} • ${state.user.graduation_year} • ${state.user.concentration}`;
+  ui.profileSummary.textContent = `${state.user.full_name} • ${state.user.graduation_year} • ${state.user.concentration}`;
 
-  const teammateText = state.matchmaking?.teammate
-    ? `Teammate matched: ${state.matchmaking.teammate.full_name}`
-    : 'No teammate matched yet';
-
-  el.paymentInfo.textContent = '';
+  ui.paymentInfo.textContent = '';
   const modeLine = document.createElement('div');
-  modeLine.className = 'small text-secondary';
-  modeLine.textContent = `Mode: ${state.user.mode || 'Not set'}`;
-  const teammateLine = document.createElement('div');
-  teammateLine.textContent = teammateText;
-  el.paymentInfo.appendChild(modeLine);
-  el.paymentInfo.appendChild(teammateLine);
-
-  if (state.user.teammate_user_id && state.matchmaking?.teammate) {
-    el.teammateCard.classList.remove('d-none');
-    el.teammateCard.textContent = `Matched with ${state.matchmaking.teammate.full_name}. Both users move to payment.`;
-  } else {
-    el.teammateCard.classList.add('d-none');
-  }
+  modeLine.className = 'small text-muted';
+  modeLine.textContent = `Mode: ${state.user.mode || 'Not selected'}`;
+  const mateLine = document.createElement('div');
+  mateLine.textContent = state.matchmaking?.teammate ? `Teammate: ${state.matchmaking.teammate.full_name}` : 'Teammate: none';
+  ui.paymentInfo.append(modeLine, mateLine);
 }
 
 async function refreshState() {
@@ -167,216 +142,154 @@ async function refreshState() {
   renderUser();
 }
 
-async function submitLogin(evt) {
-  evt.preventDefault();
-  const formData = new FormData(el.loginForm);
-  try {
-    const data = await api('login', Object.fromEntries(formData.entries()));
-    state.user = data.user;
-    showToast('Logged in', 'success');
-    await refreshState();
-  } catch (error) {
-    showToast(error.message, 'danger');
-  }
-}
-
-async function submitRegister(evt) {
-  evt.preventDefault();
-  const formData = new FormData(el.registerForm);
-  try {
-    const data = await api('register', Object.fromEntries(formData.entries()));
-    state.user = data.user;
-    showToast('Account created', 'success');
-    await refreshState();
-  } catch (error) {
-    showToast(error.message, 'danger');
-  }
-}
-
-async function logout() {
-  await api('logout');
-  state.user = null;
-  state.matchmaking = null;
-  renderUser();
-}
-
-async function setMode(mode) {
-  try {
-    const data = await api('set_mode', { mode });
-    state.user = data.user;
-    state.matchmaking = null;
-    showToast(`${mode.toUpperCase()} selected`, 'success');
-    await refreshState();
-  } catch (error) {
-    showToast(error.message, 'danger');
-  }
-}
-
 function renderSearchResults(results) {
-  el.searchResults.innerHTML = '';
+  ui.searchResults.textContent = '';
   if (!results.length) {
-    el.searchResults.innerHTML = '<div class="text-secondary small">No users found.</div>';
+    const empty = document.createElement('div');
+    empty.className = 'small text-muted';
+    empty.textContent = 'No results found.';
+    ui.searchResults.appendChild(empty);
     return;
   }
 
-  results.forEach((user) => {
-    const row = document.createElement('div');
-    row.className = 'list-group-item list-group-item-action bg-dark text-light border-secondary';
+  results.forEach((row) => {
+    const item = document.createElement('div');
+    item.className = 'list-group-item list-group-item-action';
 
-    const layout = document.createElement('div');
-    layout.className = 'd-flex justify-content-between align-items-center gap-2';
+    const wrap = document.createElement('div');
+    wrap.className = 'd-flex justify-content-between align-items-center gap-2';
+
     const info = document.createElement('div');
     const name = document.createElement('div');
     name.className = 'fw-semibold';
-    name.textContent = user.full_name;
+    name.textContent = row.full_name;
     const meta = document.createElement('small');
-    meta.className = 'text-secondary';
-    meta.textContent = `${user.graduation_year} • ${user.concentration}`;
-    const button = document.createElement('button');
-    button.className = 'btn btn-sm btn-warning';
-    button.textContent = 'Invite';
+    meta.className = 'text-muted';
+    meta.textContent = `${row.graduation_year} • ${row.concentration}`;
 
-    info.appendChild(name);
-    info.appendChild(meta);
-    layout.appendChild(info);
-    layout.appendChild(button);
-    row.appendChild(layout);
-
-    button.addEventListener('click', async () => {
+    const inviteBtn = document.createElement('button');
+    inviteBtn.className = 'btn btn-sm btn-primary';
+    inviteBtn.type = 'button';
+    inviteBtn.textContent = 'Invite';
+    inviteBtn.addEventListener('click', async () => {
       try {
-        await api('send_invite', { invitee_user_id: user.id });
-        showToast(`Invite sent to ${user.full_name}`, 'success');
-        await fetchMatchmakingState();
+        await api('send_invite', { invitee_user_id: row.id });
+        toast(`Invite sent to ${row.full_name}`, 'success');
+        await loadMatchmakingState();
       } catch (error) {
-        showToast(error.message, 'danger');
+        toast(error.message, 'danger');
       }
     });
-    el.searchResults.appendChild(row);
+
+    info.append(name, meta);
+    wrap.append(info, inviteBtn);
+    item.appendChild(wrap);
+    ui.searchResults.appendChild(item);
   });
 }
 
-async function searchUsers() {
-  try {
-    const data = await api('search_users', { query: el.searchInput.value.trim() });
-    renderSearchResults(data.results || []);
-  } catch (error) {
-    showToast(error.message, 'danger');
-  }
-}
-
-function renderIncomingInvites(incoming = []) {
-  el.incomingInvites.innerHTML = '';
+function renderIncoming(incoming) {
+  ui.incomingInvites.textContent = '';
   if (!incoming.length) {
-    el.incomingInvites.innerHTML = '<div class="text-secondary small">No incoming invites.</div>';
+    const empty = document.createElement('div');
+    empty.className = 'small text-muted';
+    empty.textContent = 'No incoming invites.';
+    ui.incomingInvites.appendChild(empty);
     return;
   }
 
   incoming.forEach((invite) => {
     const card = document.createElement('div');
-    card.className = 'p-2 border border-secondary rounded';
-    const title = document.createElement('div');
-    title.className = 'fw-semibold mb-2';
-    title.textContent = `${invite.inviter_full_name} invited you`;
+    card.className = 'invite-card';
 
-    const buttonRow = document.createElement('div');
-    buttonRow.className = 'd-flex gap-2';
+    const text = document.createElement('div');
+    text.className = 'fw-semibold mb-2';
+    text.textContent = `${invite.inviter_full_name} invited you`;
 
-    const acceptBtn = document.createElement('button');
-    acceptBtn.className = 'btn btn-success btn-sm';
-    acceptBtn.dataset.decision = 'accept';
-    acceptBtn.textContent = 'Accept';
+    const actions = document.createElement('div');
+    actions.className = 'd-flex gap-2';
 
-    const declineBtn = document.createElement('button');
-    declineBtn.className = 'btn btn-outline-danger btn-sm';
-    declineBtn.dataset.decision = 'decline';
-    declineBtn.textContent = 'Decline';
+    const accept = document.createElement('button');
+    accept.className = 'btn btn-success btn-sm';
+    accept.type = 'button';
+    accept.textContent = 'Accept';
+    accept.addEventListener('click', () => replyInvite(invite.id, 'accept'));
 
-    [acceptBtn, declineBtn].forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        try {
-          await api('respond_invite', { invite_id: invite.id, decision: btn.dataset.decision });
-          showToast(btn.dataset.decision === 'accept' ? 'Invite accepted' : 'Invite declined', 'success');
-          await fetchMatchmakingState();
-        } catch (error) {
-          showToast(error.message, 'danger');
-        }
-      });
-    });
+    const decline = document.createElement('button');
+    decline.className = 'btn btn-outline-light btn-sm';
+    decline.type = 'button';
+    decline.textContent = 'Decline';
+    decline.addEventListener('click', () => replyInvite(invite.id, 'decline'));
 
-    buttonRow.appendChild(acceptBtn);
-    buttonRow.appendChild(declineBtn);
-    card.appendChild(title);
-    card.appendChild(buttonRow);
-
-    el.incomingInvites.appendChild(card);
+    actions.append(accept, decline);
+    card.append(text, actions);
+    ui.incomingInvites.appendChild(card);
   });
 }
 
-function renderOutgoingInvite(outgoing) {
+function renderOutgoing(outgoing) {
   if (!outgoing) {
-    el.outgoingInvite.textContent = 'No outgoing invite.';
+    ui.outgoingInvite.textContent = 'No outgoing invite.';
     return;
   }
 
   let text = `Invite to ${outgoing.invitee_full_name}: ${outgoing.status}`;
-  if (outgoing.status === 'declined') {
-    text += ' — select a new teammate.';
-  }
-  if (outgoing.status === 'accepted') {
-    text += ' — moving to payment.';
-  }
-
-  el.outgoingInvite.textContent = text;
+  if (outgoing.status === 'declined') text += ' — choose a new teammate.';
+  if (outgoing.status === 'accepted') text += ' — moving to payment.';
+  ui.outgoingInvite.textContent = text;
 }
 
-async function fetchMatchmakingState() {
-  if (!state.user || state.user.registration_step !== 'matchmaking') return;
+async function replyInvite(inviteId, decision) {
+  try {
+    await api('respond_invite', { invite_id: inviteId, decision });
+    toast(decision === 'accept' ? 'Invite accepted' : 'Invite declined', 'success');
+    await loadMatchmakingState();
+  } catch (error) {
+    toast(error.message, 'danger');
+  }
+}
 
+async function loadMatchmakingState() {
+  if (!state.user || state.user.registration_step !== 'matchmaking') return;
   try {
     const data = await api('matchmaking_state');
+    state.user = data.user;
     state.matchmaking = {
       incoming: data.incoming,
       outgoing: data.outgoing,
       teammate: data.teammate,
     };
 
-    state.user = data.user;
-    renderIncomingInvites(data.incoming || []);
-    renderOutgoingInvite(data.outgoing || null);
+    renderIncoming(data.incoming || []);
+    renderOutgoing(data.outgoing || null);
 
-    if (data.user.registration_step !== 'matchmaking') {
-      showToast('Match completed. Proceeding to payment.', 'success');
-      await refreshState();
-      return;
+    if (state.matchmaking.teammate) {
+      ui.teammateCard.classList.remove('d-none');
+      ui.teammateCard.textContent = `Matched with ${state.matchmaking.teammate.full_name}. Continue to payment.`;
+    } else {
+      ui.teammateCard.classList.add('d-none');
     }
 
-    renderUser();
+    if (data.user.registration_step !== 'matchmaking') {
+      await refreshState();
+    } else {
+      renderUser();
+    }
   } catch (error) {
-    showToast(error.message, 'danger');
+    toast(error.message, 'danger');
   }
 }
 
-function startMatchmakingPolling() {
-  if (state.polling) return;
-  fetchMatchmakingState();
-  state.polling = setInterval(fetchMatchmakingState, 3000);
+function startPolling() {
+  if (state.pollTimer) return;
+  loadMatchmakingState();
+  state.pollTimer = setInterval(loadMatchmakingState, 3000);
 }
 
-function stopMatchmakingPolling() {
-  if (!state.polling) return;
-  clearInterval(state.polling);
-  state.polling = null;
-}
-
-async function completePayment() {
-  try {
-    const data = await api('complete_payment');
-    state.user = data.user;
-    showToast('Payment marked complete', 'success');
-    await refreshState();
-  } catch (error) {
-    showToast(error.message, 'danger');
-  }
+function stopPolling() {
+  if (!state.pollTimer) return;
+  clearInterval(state.pollTimer);
+  state.pollTimer = null;
 }
 
 function wireEvents() {
@@ -384,39 +297,94 @@ function wireEvents() {
     btn.addEventListener('click', () => setAuthTab(btn.dataset.authTab));
   });
 
-  el.loginForm.addEventListener('submit', submitLogin);
-  el.registerForm.addEventListener('submit', submitRegister);
-  el.logoutBtn.addEventListener('click', logout);
-
-  document.querySelectorAll('.mode-btn').forEach((btn) => {
-    btn.addEventListener('click', () => setMode(btn.dataset.mode));
-  });
-
-  el.searchBtn.addEventListener('click', searchUsers);
-  el.searchInput.addEventListener('keypress', (evt) => {
-    if (evt.key === 'Enter') {
-      evt.preventDefault();
-      searchUsers();
+  ui.loginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      const payload = Object.fromEntries(new FormData(ui.loginForm).entries());
+      const data = await api('login', payload);
+      state.user = data.user;
+      toast('Logged in', 'success');
+      await refreshState();
+    } catch (error) {
+      toast(error.message, 'danger');
     }
   });
 
-  el.continueToMode.addEventListener('click', async () => {
+  ui.registerForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      const payload = Object.fromEntries(new FormData(ui.registerForm).entries());
+      const data = await api('register', payload);
+      state.user = data.user;
+      toast('Account created', 'success');
+      await refreshState();
+    } catch (error) {
+      toast(error.message, 'danger');
+    }
+  });
+
+  ui.logoutBtn.addEventListener('click', async () => {
+    await api('logout');
+    state.user = null;
+    state.matchmaking = null;
+    renderUser();
+    toast('Logged out', 'secondary');
+  });
+
+  ui.continueToMode.addEventListener('click', async () => {
     try {
       const data = await api('set_step', { step: 'mode' });
       state.user = data.user;
       await refreshState();
     } catch (error) {
-      showToast(error.message, 'danger');
+      toast(error.message, 'danger');
     }
   });
 
-  el.completePaymentBtn.addEventListener('click', completePayment);
+  document.querySelectorAll('.mode-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      try {
+        const data = await api('set_mode', { mode: btn.dataset.mode });
+        state.user = data.user;
+        state.matchmaking = null;
+        await refreshState();
+      } catch (error) {
+        toast(error.message, 'danger');
+      }
+    });
+  });
+
+  ui.searchBtn.addEventListener('click', async () => {
+    try {
+      const data = await api('search_users', { query: ui.searchInput.value.trim() });
+      renderSearchResults(data.results || []);
+    } catch (error) {
+      toast(error.message, 'danger');
+    }
+  });
+
+  ui.searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      ui.searchBtn.click();
+    }
+  });
+
+  ui.completePaymentBtn.addEventListener('click', async () => {
+    try {
+      const data = await api('complete_payment');
+      state.user = data.user;
+      await refreshState();
+      toast('Payment saved', 'success');
+    } catch (error) {
+      toast(error.message, 'danger');
+    }
+  });
 }
 
 async function init() {
   wireEvents();
   setAuthTab('login');
-
   if (state.user) {
     await refreshState();
   } else {

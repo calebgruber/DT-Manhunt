@@ -23,6 +23,7 @@ Campus-wide Manhunt platform blueprint for SUNY Purchase using:
 - `docs/architecture.md` – end-to-end system architecture and deployment model
 - `docs/event-model.md` – WebSocket and PHP↔Node event contracts
 - `docs/ui-wireframes.md` – Bootstrap 5 screen-level wireframes/spec
+- `starter.sql` – MySQL starter schema for production database setup
 
 ## Suggested Project Layout (cPanel deployment)
 
@@ -42,4 +43,4 @@ Campus-wide Manhunt platform blueprint for SUNY Purchase using:
 
 This design keeps PHP simple and cPanel-friendly while providing low-latency mobile real-time behavior.
 
-> Note: current repository scaffold uses SQLite (`manhunt.sqlite`) for quick deployment. Production can swap persistence to MySQL per the architecture plan.
+> Runtime default: SQLite (`manhunt.sqlite`). To use MySQL, set `DB_DSN`, `DB_USER`, and `DB_PASS`, then run `starter.sql`.
